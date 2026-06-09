@@ -2698,6 +2698,10 @@ async function init() {
     return;
   }
   await fetchClients();
+  // Auto-select the first client so the dashboard loads with data right away
+  if (STATE.clients.length > 0 && !STATE.activeClient) {
+    await selectClient(STATE.clients[0].slug);
+  }
   updateSyncTime();
 }
 
