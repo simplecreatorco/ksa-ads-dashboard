@@ -1123,14 +1123,16 @@
   <div id="toast"></div>
 
 
+<script src="config.js"></script>
 <script>
 // ============================================================
 // CONFIGURATION
 // ============================================================
-const SHEET_ID = '1OJ68ds0m-pQbV4Fp25bjBPQkNAHoRM-_Jqz3ZRUKHpg';
-const API_KEY = 'YOUR_API_KEY_HERE';  // Rebecca will fill this in
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbweWwzhWW75kz8qvDTw5gqjveyNT4kTDgsTfdgpaqIWSbtrV82ayPq2d48XjibwsPXj/exec';
-const WEBAPP_SECRET = 'YOUR_SECRET_HERE';  // Rebecca will fill this in
+// Loaded from config.js (gitignored, injected at deploy time from GitHub Secrets)
+const SHEET_ID = window.__KSA_CONFIG__?.SHEET_ID || '';
+const API_KEY = window.__KSA_CONFIG__?.API_KEY || '';
+const WEBAPP_URL = window.__KSA_CONFIG__?.WEBAPP_URL || '';
+const WEBAPP_SECRET = window.__KSA_CONFIG__?.WEBAPP_SECRET || '';
 
 // Scaling thresholds
 const SCALE_THRESHOLD    = 1.4;
