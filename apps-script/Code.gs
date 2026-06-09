@@ -14,6 +14,7 @@
  *   META_TOKEN    — Meta System User access token (ads_read permission)
  *   SHEET_ID      — Google Sheet ID
  *   WEBAPP_SECRET — shared secret for verifying requests from dashboard
+ *   API_KEY       — Google Sheets API key (for dashboard reads)
  *
  * TIMEZONE: Set to America/Chicago in File > Project Settings
  *
@@ -301,12 +302,15 @@ function doPost(e) {
 }
 
 /**
- * Also handle GET requests (for testing / health check)
+ * Handle GET requests — returns dashboard config from Script Properties.
+ * The dashboard fetches this on load so no secrets live in the GitHub repo.
  */
 function doGet(e) {
+  const props = PropertiesService.getScriptProperties();
   return ContentService.createTextOutput(JSON.stringify({
-    status: 'ok',
-    message: 'KSA Ads Dashboard API is running'
+    SHEET_ID: props.getProperty('SHEET_ID'),
+    API_KEY: props.getProperty('API_KEY'),
+    WEBAPP_SECRET: props.getProperty('WEBAPP_SECRET')
   })).setMimeType(ContentService.MimeType.JSON);
 }
 

@@ -1123,16 +1123,16 @@
   <div id="toast"></div>
 
 
-<script src="config.js"></script>
 <script>
 // ============================================================
 // CONFIGURATION
 // ============================================================
-// Loaded from config.js (gitignored, injected at deploy time from GitHub Secrets)
-const SHEET_ID = window.__KSA_CONFIG__?.SHEET_ID || '';
-const API_KEY = window.__KSA_CONFIG__?.API_KEY || '';
-const WEBAPP_URL = window.__KSA_CONFIG__?.WEBAPP_URL || '';
-const WEBAPP_SECRET = window.__KSA_CONFIG__?.WEBAPP_SECRET || '';
+// Config is fetched from Apps Script on load — no secrets in the repo.
+// Only WEBAPP_URL is hardcoded (it's a public Google endpoint, not a secret).
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbweWwzhWW75kz8qvDTw5gqjveyNT4kTDgsTfdgpaqIWSbtrV82ayPq2d48XjibwsPXj/exec';
+let SHEET_ID = '';
+let API_KEY = '';
+let WEBAPP_SECRET = '';
 
 // Scaling thresholds
 const SCALE_THRESHOLD    = 1.4;
@@ -2677,7 +2677,26 @@ function showToast(msg) {
 // INIT
 // ============================================================
 
+async function loadConfig() {
+  try {
+    const res = await fetch(WEBAPP_URL);
+    if (!res.ok) throw new Error('Config fetch failed');
+    const cfg = await res.json();
+    SHEET_ID = cfg.SHEET_ID || '';
+    API_KEY = cfg.API_KEY || '';
+    WEBAPP_SECRET = cfg.WEBAPP_SECRET || '';
+  } catch (err) {
+    console.error('Failed to load config:', err);
+    showToast('Failed to load dashboard config. Check Apps Script deployment.', true);
+  }
+}
+
 async function init() {
+  await loadConfig();
+  if (!SHEET_ID || !API_KEY) {
+    showToast('Missing config — check Apps Script properties.', true);
+    return;
+  }
   await fetchClients();
   updateSyncTime();
 }
