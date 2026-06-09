@@ -1,0 +1,2687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KSA Internal Ads Dashboard</title>
+
+  <!-- Fonts: Using Lora as fallback until MackinacPro woff2 files are added to /fonts/ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Lora:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================
+       KSA BRAND VARIABLES
+       ============================================ */
+    :root {
+      --ksa-bg:           #FFF6EF;
+      --ksa-pink:         #F77F9F;
+      --ksa-pink-light:   #FFDCD9;
+      --ksa-orange:       #F49656;
+      --ksa-text:         #4C4C4C;
+      --ksa-white:        #FFFFFF;
+      --ksa-border:       #F0E8E2;
+
+      --ksa-green:        #6BAF8A;
+      --ksa-flag:         #F4A24A;
+      --ksa-red:          #E07070;
+      --ksa-slate:        #889CA2;
+
+      --ksa-green-soft:   #EFF7F3;
+      --ksa-flag-soft:    #FDF4E7;
+      --ksa-red-soft:     #FCF0F0;
+      --ksa-slate-soft:   #F0F4F6;
+
+      /* Typography — swap 'Lora' for 'MackinacPro' when font files are available */
+      --font-heading:     'Lora', Georgia, serif;
+      --font-body:        'Lora', Georgia, serif;
+      --font-label:       'Bebas Neue', sans-serif;
+
+      --sidebar-w: 240px;
+      --topbar-h: 56px;
+    }
+
+    /* ============================================
+       RESET + BASE
+       ============================================ */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--ksa-bg);
+      font-family: var(--font-body);
+      font-weight: 400;
+      color: var(--ksa-text);
+      line-height: 1.7;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ============================================
+       TOP BAR
+       ============================================ */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: var(--topbar-h);
+      background: var(--ksa-pink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-mark {
+      font-family: var(--font-label);
+      font-size: 22px;
+      color: var(--ksa-white);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .topbar-divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(255,255,255,0.35);
+    }
+
+    .topbar-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--ksa-white);
+    }
+
+    .topbar-client {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--ksa-white);
+      opacity: 0.9;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-sync {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: rgba(255,255,255,0.75);
+    }
+
+    .topbar-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: var(--ksa-white);
+      font-family: var(--font-label);
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .topbar-btn:hover { background: rgba(255,255,255,0.3); }
+
+    .topbar-settings-btn {
+      background: none;
+      border: none;
+      color: var(--ksa-white);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .topbar-settings-btn:hover { background: rgba(255,255,255,0.2); }
+
+    /* ============================================
+       SIDEBAR
+       ============================================ */
+    #sidebar {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--ksa-white);
+      border-right: 1.5px solid var(--ksa-border);
+      overflow-y: auto;
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-label {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--ksa-orange);
+      padding: 20px 20px 8px;
+    }
+
+    .sidebar-client {
+      padding: 10px 20px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--ksa-text);
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .sidebar-client:hover {
+      background: var(--ksa-bg);
+    }
+
+    .sidebar-client.active {
+      background: var(--ksa-pink-light);
+      border-left-color: var(--ksa-pink);
+      font-weight: 700;
+    }
+
+    .sidebar-add {
+      padding: 14px 20px;
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-pink);
+      cursor: pointer;
+      margin-top: auto;
+      border-top: 1px solid var(--ksa-border);
+      transition: background 0.15s;
+    }
+
+    .sidebar-add:hover { background: var(--ksa-bg); }
+
+    /* ============================================
+       MAIN CONTENT
+       ============================================ */
+    #main {
+      position: fixed;
+      top: var(--topbar-h);
+      left: var(--sidebar-w);
+      right: 0;
+      bottom: 0;
+      overflow-y: auto;
+      padding: 28px 32px 60px;
+    }
+
+    .main-inner {
+      max-width: 1100px;
+    }
+
+    /* No-client placeholder */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60vh;
+      text-align: center;
+    }
+
+    .empty-state-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 28px;
+      color: var(--ksa-pink);
+      margin-bottom: 8px;
+    }
+
+    .empty-state-text {
+      font-size: 15px;
+      color: var(--ksa-text);
+      opacity: 0.7;
+    }
+
+    /* Loading spinner */
+    .loading-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 40vh;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--ksa-border);
+      border-top-color: var(--ksa-pink);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ============================================
+       DATE RANGE BAR
+       ============================================ */
+    .date-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .date-toggle {
+      display: inline-flex;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1.5px solid var(--ksa-border);
+    }
+
+    .date-toggle-btn {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 7px 18px;
+      border: none;
+      background: var(--ksa-white);
+      color: var(--ksa-text);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .date-toggle-btn.active {
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+    }
+
+    .date-toggle-btn:not(:last-child) {
+      border-right: 1.5px solid var(--ksa-border);
+    }
+
+    .custom-date-wrap {
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .custom-date-wrap.show { display: flex; }
+
+    .custom-date-wrap input[type="date"] {
+      font-family: var(--font-body);
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 6px;
+      background: var(--ksa-white);
+      color: var(--ksa-text);
+    }
+
+    .custom-date-wrap .apply-btn {
+      font-family: var(--font-label);
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border: none;
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* ============================================
+       SUMMARY CARDS
+       ============================================ */
+    .cards-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .summary-card {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      padding: 22px;
+      border: 1.5px solid var(--ksa-border);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .summary-card-eyebrow {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--ksa-orange);
+      margin-bottom: 6px;
+    }
+
+    .summary-card-value {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 30px;
+      color: var(--ksa-text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .summary-card-sub {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--ksa-text);
+      opacity: 0.55;
+    }
+
+    .summary-card.highlight {
+      background: var(--ksa-pink-light);
+      border: none;
+    }
+
+    /* ============================================
+       SECTION HEADING
+       ============================================ */
+    .section-heading {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--ksa-pink);
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    /* ============================================
+       CHART AREA
+       ============================================ */
+    .chart-wrap {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      border: 1.5px solid var(--ksa-border);
+      padding: 24px;
+      margin-bottom: 28px;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .chart-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--ksa-text);
+    }
+
+    .chart-toggle {
+      display: inline-flex;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1.5px solid var(--ksa-border);
+    }
+
+    .chart-toggle-btn {
+      font-family: var(--font-label);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 5px 14px;
+      border: none;
+      background: var(--ksa-white);
+      color: var(--ksa-text);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chart-toggle-btn.active {
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+    }
+
+    .chart-toggle-btn:not(:last-child) {
+      border-right: 1.5px solid var(--ksa-border);
+    }
+
+    .chart-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 260px;
+    }
+
+    .chart-canvas-wrap canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ============================================
+       OFFER CARDS (Account Overview)
+       ============================================ */
+    .offer-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .offer-card {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      padding: 22px;
+      border: 1.5px solid var(--ksa-border);
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+
+    .offer-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    .offer-card-name {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--ksa-text);
+      margin-bottom: 12px;
+    }
+
+    .offer-card-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 16px;
+    }
+
+    .offer-card-metric-label {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-pink);
+      margin-bottom: 2px;
+    }
+
+    .offer-card-metric-value {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--ksa-text);
+      line-height: 1;
+    }
+
+    /* ============================================
+       OFFER VIEW
+       ============================================ */
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--ksa-pink);
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 20px;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .back-btn:hover { opacity: 0.8; }
+
+    /* Purchase summary strip */
+    .purchase-strip {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      margin-bottom: 24px;
+      padding-bottom: 4px;
+    }
+
+    .purchase-cell {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      border: 1.5px solid var(--ksa-border);
+      padding: 16px 20px;
+      min-width: 140px;
+      text-align: center;
+    }
+
+    .purchase-cell-name {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-pink);
+      margin-bottom: 6px;
+      white-space: nowrap;
+    }
+
+    .purchase-cell-units {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 24px;
+      color: var(--ksa-text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .purchase-cell-rate {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--ksa-text);
+      opacity: 0.6;
+    }
+
+    /* Campaign tabs */
+    .campaign-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1.5px solid var(--ksa-border);
+    }
+
+    .campaign-tab {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 10px 20px;
+      border: none;
+      background: transparent;
+      color: var(--ksa-text);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      opacity: 0.6;
+      transition: all 0.15s;
+    }
+
+    .campaign-tab.active {
+      opacity: 1;
+      border-bottom-color: var(--ksa-pink);
+      color: var(--ksa-pink);
+    }
+
+    .campaign-tab .tab-count {
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 11px;
+      background: var(--ksa-pink-light);
+      color: var(--ksa-pink);
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+
+    /* Campaign table */
+    .campaign-table {
+      background: var(--ksa-white);
+      border-radius: 0 0 14px 14px;
+      border: 1.5px solid var(--ksa-border);
+      border-top: none;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+
+    .campaign-row {
+      display: grid;
+      grid-template-columns: 36px 100px 1fr 70px 80px 80px 80px 70px 180px;
+      align-items: center;
+      padding: 12px 16px;
+      gap: 8px;
+      border-bottom: 1px solid var(--ksa-border);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .campaign-row:last-child { border-bottom: none; }
+
+    .campaign-row-header {
+      background: #FAFAF8;
+      cursor: default;
+    }
+
+    .campaign-row-header span {
+      font-family: var(--font-label);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-text);
+      opacity: 0.5;
+    }
+
+    .campaign-row:not(.campaign-row-header):hover {
+      background: #FEFCFA;
+    }
+
+    .campaign-checkbox {
+      width: 17px; height: 17px;
+      accent-color: var(--ksa-pink);
+      cursor: pointer;
+    }
+
+    /* Status badges */
+    .status-badge {
+      display: inline-block;
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .status-scale     { background: var(--ksa-green-soft); color: var(--ksa-green); }
+    .status-duplicate  { background: var(--ksa-green-soft); color: var(--ksa-green); }
+    .status-watch      { background: var(--ksa-flag-soft);  color: var(--ksa-flag);  }
+    .status-turnoff    { background: var(--ksa-red-soft);   color: var(--ksa-red);   }
+    .status-new        { background: var(--ksa-slate-soft); color: var(--ksa-slate); }
+    .status-hold       { background: #F5F5F5;              color: #888888;          }
+
+    .campaign-name-cell {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--ksa-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .campaign-metric {
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--ksa-text);
+    }
+
+    .campaign-action {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .action-scale     { color: var(--ksa-green); }
+    .action-watch     { color: var(--ksa-flag);  }
+    .action-turnoff   { color: var(--ksa-red);   }
+    .action-new       { color: var(--ksa-slate); }
+    .action-hold      { color: #888;             }
+
+    /* Expanded row mini chart */
+    .campaign-expand {
+      display: none;
+      grid-column: 1 / -1;
+      padding: 12px 16px 16px 52px;
+      border-top: 1px dashed var(--ksa-border);
+    }
+
+    .campaign-expand.open { display: block; }
+
+    .mini-chart-wrap {
+      height: 100px;
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .mini-chart-wrap canvas { width: 100%; height: 100%; }
+
+    /* ============================================
+       SETTINGS PANEL (Slide-in)
+       ============================================ */
+    #settings-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.25);
+      z-index: 200;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    #settings-overlay.show { display: block; opacity: 1; }
+
+    #settings-panel {
+      position: fixed;
+      top: 0; right: -480px; bottom: 0;
+      width: 460px;
+      max-width: 90vw;
+      background: var(--ksa-white);
+      z-index: 210;
+      overflow-y: auto;
+      transition: right 0.3s ease;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.1);
+      padding: 32px;
+    }
+
+    #settings-panel.open { right: 0; }
+
+    .settings-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--ksa-text);
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .settings-section {
+      margin-bottom: 28px;
+    }
+
+    .settings-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 22px;
+      color: var(--ksa-pink);
+      margin-bottom: 20px;
+    }
+
+    .settings-label {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-orange);
+      margin-bottom: 6px;
+    }
+
+    .settings-input {
+      width: 100%;
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 6px;
+      color: var(--ksa-text);
+      background: var(--ksa-white);
+      margin-bottom: 16px;
+    }
+
+    .settings-input:focus {
+      outline: none;
+      border-color: var(--ksa-pink);
+    }
+
+    .settings-input[readonly] {
+      background: #F8F6F4;
+      color: #999;
+    }
+
+    .settings-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .settings-row .settings-input { margin-bottom: 0; }
+
+    .offer-block {
+      background: var(--ksa-bg);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .offer-block-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .offer-block-name {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--ksa-text);
+    }
+
+    .offer-block-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .small-btn {
+      font-family: var(--font-label);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .small-btn:hover { opacity: 0.85; }
+
+    .small-btn-pink {
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+    }
+
+    .small-btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--ksa-pink);
+      color: var(--ksa-pink);
+    }
+
+    .product-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--ksa-border);
+      font-size: 14px;
+    }
+
+    .product-row:last-child { border-bottom: none; }
+
+    .product-drag {
+      cursor: grab;
+      color: #ccc;
+      font-size: 16px;
+      user-select: none;
+    }
+
+    .product-name {
+      flex: 1;
+      font-family: var(--font-body);
+      color: var(--ksa-text);
+    }
+
+    .product-price {
+      font-family: var(--font-body);
+      font-weight: 700;
+      color: var(--ksa-text);
+    }
+
+    .product-price-btn {
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--ksa-pink);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .ksa-btn {
+      display: inline-block;
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+      font-family: var(--font-label);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 10px 24px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .ksa-btn:hover { opacity: 0.88; }
+
+    .ksa-btn-outline {
+      display: inline-block;
+      background: transparent;
+      color: var(--ksa-pink);
+      font-family: var(--font-label);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 8px 22px;
+      border-radius: 6px;
+      border: 2px solid var(--ksa-pink);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .ksa-btn-outline:hover {
+      background: var(--ksa-pink);
+      color: var(--ksa-white);
+    }
+
+    /* ============================================
+       MODAL (for price changes, add offer, etc.)
+       ============================================ */
+    #modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #modal-overlay.show { display: flex; }
+
+    .modal-box {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      padding: 32px;
+      width: 420px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+
+    .modal-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--ksa-pink);
+      margin-bottom: 20px;
+    }
+
+    .modal-label {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-orange);
+      margin-bottom: 6px;
+    }
+
+    .modal-input {
+      width: 100%;
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 6px;
+      color: var(--ksa-text);
+      margin-bottom: 16px;
+    }
+
+    .modal-input:focus { outline: none; border-color: var(--ksa-pink); }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    /* ============================================
+       TOAST NOTIFICATION
+       ============================================ */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--ksa-text);
+      color: var(--ksa-white);
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      z-index: 500;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 900px) {
+      .cards-row { grid-template-columns: repeat(2, 1fr); }
+      .campaign-row {
+        grid-template-columns: 36px 80px 1fr 60px 70px 140px;
+      }
+      .campaign-row > :nth-child(6),
+      .campaign-row > :nth-child(7),
+      .campaign-row > :nth-child(8) { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      :root { --sidebar-w: 180px; }
+      .cards-row { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================
+       TOP BAR
+       ============================================ -->
+  <div id="topbar">
+    <div class="topbar-left">
+      <span class="topbar-mark">KSA</span>
+      <span class="topbar-divider"></span>
+      <span class="topbar-title">Internal Ads Dashboard</span>
+      <span class="topbar-divider" id="topbar-client-divider" style="display:none"></span>
+      <span class="topbar-client" id="topbar-client-name"></span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-sync" id="topbar-sync">Last synced: --</span>
+      <button class="topbar-btn" id="refresh-btn" onclick="refreshData()">Refresh</button>
+      <button class="topbar-settings-btn" id="settings-btn" onclick="openSettings()" title="Settings">&#9881;</button>
+    </div>
+  </div>
+
+  <!-- ============================================
+       SIDEBAR
+       ============================================ -->
+  <div id="sidebar">
+    <div class="sidebar-label">Clients</div>
+    <div id="client-list"></div>
+    <div class="sidebar-add" onclick="openAddClient()">+ Add Client</div>
+  </div>
+
+  <!-- ============================================
+       MAIN CONTENT
+       ============================================ -->
+  <div id="main">
+    <div class="main-inner" id="main-content">
+      <div class="empty-state">
+        <div class="empty-state-title">Select a Client</div>
+        <div class="empty-state-text">Choose a client from the sidebar to view their ad performance.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       SETTINGS PANEL
+       ============================================ -->
+  <div id="settings-overlay" onclick="closeSettings()"></div>
+  <div id="settings-panel">
+    <button class="settings-close" onclick="closeSettings()">&times;</button>
+    <div id="settings-content"></div>
+  </div>
+
+  <!-- ============================================
+       MODAL
+       ============================================ -->
+  <div id="modal-overlay" onclick="closeModal()">
+    <div class="modal-box" onclick="event.stopPropagation()" id="modal-box"></div>
+  </div>
+
+  <!-- ============================================
+       TOAST
+       ============================================ -->
+  <div id="toast"></div>
+
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const SHEET_ID = '1OJ68ds0m-pQbV4Fp25bjBPQkNAHoRM-_Jqz3ZRUKHpg';
+const API_KEY = 'YOUR_API_KEY_HERE';  // Rebecca will fill this in
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbweWwzhWW75kz8qvDTw5gqjveyNT4kTDgsTfdgpaqIWSbtrV82ayPq2d48XjibwsPXj/exec';
+const WEBAPP_SECRET = 'YOUR_SECRET_HERE';  // Rebecca will fill this in
+
+// Scaling thresholds
+const SCALE_THRESHOLD    = 1.4;
+const ORANGE_THRESHOLD   = 1.25;
+const BREAK_EVEN         = 1.0;
+const TURN_OFF_THRESHOLD = 0.75;
+
+// ============================================================
+// STATE
+// ============================================================
+let STATE = {
+  clients: [],
+  activeClient: null,     // { name, slug, metaIds, status, notes }
+  activeOffer: null,       // offer name string, or null for account overview
+  dateRange: '7d',         // '7d', '30d', 'custom'
+  customStart: null,
+  customEnd: null,
+  chartMode: 'spend',     // 'spend' or 'roas'
+  campaignTab: 'actions',  // 'actions', 'orange', 'new', 'all'
+  expandedCampaign: null,
+
+  // Cached data per client slug
+  cache: {},
+  // { [slug]: { dailyMeta, config, purchases: { [offerName]: rows }, checkboxState, lastFetch } }
+};
+
+// ============================================================
+// GOOGLE SHEETS DATA LAYER
+// ============================================================
+
+function sheetsUrl(tabName) {
+  const encoded = encodeURIComponent(tabName);
+  return `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encoded}?key=${API_KEY}`;
+}
+
+async function fetchSheet(tabName) {
+  try {
+    const res = await fetch(sheetsUrl(tabName));
+    if (!res.ok) {
+      console.warn(`Sheet fetch failed for "${tabName}": ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    if (!data.values || data.values.length < 2) return [];
+    const headers = data.values[0];
+    return data.values.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
+      return obj;
+    });
+  } catch (e) {
+    console.error(`Error fetching "${tabName}":`, e);
+    return [];
+  }
+}
+
+async function fetchClients() {
+  const rows = await fetchSheet('Clients');
+  STATE.clients = rows.filter(r => r['Status'] === 'Active').map(r => ({
+    name: r['Client Name'] || '',
+    slug: r['Slug'] || '',
+    metaIds: r['Meta Account ID(s)'] || '',
+    status: r['Status'] || '',
+    notes: r['Notes'] || ''
+  }));
+  renderSidebar();
+}
+
+async function fetchClientData(slug) {
+  if (!slug) return;
+  const client = STATE.clients.find(c => c.slug === slug);
+  if (!client) return;
+
+  const tabSlug = slug;
+
+  // Fetch in parallel
+  const [dailyMeta, config, checkboxState] = await Promise.all([
+    fetchSheet(`${tabSlug} - Daily Meta`),
+    fetchSheet(`${tabSlug} - Config`),
+    fetchSheet('CHECKBOX_STATE')
+  ]);
+
+  // Filter checkbox state for this client and today
+  const today = dateStr(new Date());
+  const myCheckboxes = checkboxState.filter(r =>
+    r['Client Slug'] === slug && r['Date'] === today
+  );
+
+  // Get unique offers from config
+  const offers = [];
+  const seenOffers = new Set();
+  config.forEach(r => {
+    const offerName = r['Offer Name'];
+    if (offerName && !seenOffers.has(offerName)) {
+      seenOffers.add(offerName);
+      offers.push(offerName);
+    }
+  });
+
+  // Fetch purchases for each offer
+  const purchases = {};
+  const purchasePromises = offers.map(async (offerName) => {
+    const tabName = `${tabSlug} - ${offerName} Purchases`;
+    purchases[offerName] = await fetchSheet(tabName);
+  });
+  await Promise.all(purchasePromises);
+
+  STATE.cache[slug] = {
+    dailyMeta: parseDailyMeta(dailyMeta),
+    config,
+    offers,
+    purchases,
+    checkboxState: myCheckboxes,
+    lastFetch: new Date()
+  };
+
+  updateSyncTime();
+}
+
+function parseDailyMeta(rows) {
+  return rows.map(r => ({
+    date: r['Date'] || '',
+    campaign: r['Campaign Name'] || '',
+    spend: parseNum(r['Amount Spent']),
+    impressions: parseNum(r['Impressions']),
+    reach: parseNum(r['Reach']),
+    clicks: parseNum(r['Clicks']),
+    leads: parseNum(r['Leads']),
+    purchases: parseNum(r['Purchases']),
+    purchaseValue: parseNum(r['Purchase Value']),
+    cpm: parseNum(r['CPM']),
+    cpc: parseNum(r['CPC']),
+    ctr: parseNum(r['CTR']),
+    roas: parseNum(r['ROAS'])
+  }));
+}
+
+function parseNum(v) {
+  if (!v) return 0;
+  const n = parseFloat(v.replace(/[$,%]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+function dateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+}
+
+// ============================================================
+// APPS SCRIPT WEB APP LAYER
+// ============================================================
+
+async function postToWebApp(action, payload) {
+  try {
+    const res = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webapp-Secret': WEBAPP_SECRET
+      },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const result = await res.json();
+    if (result.error) {
+      showToast('Error: ' + result.error);
+      return null;
+    }
+    showToast('Saved successfully');
+    return result;
+  } catch (e) {
+    console.error('Web app POST error:', e);
+    showToast('Failed to save. Check console.');
+    return null;
+  }
+}
+
+async function saveCheckbox(campaignName, action, checked) {
+  if (!STATE.activeClient) return;
+  await postToWebApp('save_checkbox_state', {
+    clientSlug: STATE.activeClient.slug,
+    campaignName,
+    action,
+    checked,
+    date: dateStr(new Date())
+  });
+}
+
+// ============================================================
+// DATE RANGE HELPERS
+// ============================================================
+
+function getDateRange() {
+  const today = new Date();
+  let start, end;
+  end = new Date(today);
+  if (STATE.dateRange === '7d') {
+    start = daysAgo(7);
+  } else if (STATE.dateRange === '30d') {
+    start = daysAgo(30);
+  } else {
+    start = STATE.customStart ? new Date(STATE.customStart) : daysAgo(7);
+    end = STATE.customEnd ? new Date(STATE.customEnd) : today;
+  }
+  return { start: dateStr(start), end: dateStr(end) };
+}
+
+function filterByDateRange(rows, dateField = 'date') {
+  const { start, end } = getDateRange();
+  return rows.filter(r => {
+    const d = r[dateField];
+    return d >= start && d <= end;
+  });
+}
+
+// ============================================================
+// STATUS LOGIC
+// ============================================================
+
+function windowMetrics(rows, days) {
+  const cutoff = dateStr(daysAgo(days));
+  const filtered = rows.filter(r => r.date >= cutoff);
+  if (filtered.length === 0) return { spend: 0, purchases: 0, roas: 0, cpm: 0, revenue: 0, days: 0 };
+  const spend = filtered.reduce((s, r) => s + r.spend, 0);
+  const revenue = filtered.reduce((s, r) => s + r.purchaseValue, 0);
+  const purchases = filtered.reduce((s, r) => s + r.purchases, 0);
+  const cpm = filtered.length > 0 ? filtered.reduce((s, r) => s + r.cpm, 0) / filtered.length : 0;
+  return {
+    spend,
+    revenue,
+    purchases,
+    roas: spend > 0 ? revenue / spend : 0,
+    cpm,
+    days: filtered.length
+  };
+}
+
+function calculateStatus(campaignRows) {
+  // Sort by date
+  const sorted = [...campaignRows].sort((a, b) => a.date.localeCompare(b.date));
+  const uniqueDates = [...new Set(sorted.map(r => r.date))];
+  const totalDays = uniqueDates.length;
+
+  const yw = windowMetrics(sorted, 1);
+  const d7w = windowMetrics(sorted, 7);
+  const d14w = windowMetrics(sorted, 14);
+
+  const roas7 = d7w.roas;
+  const roasYesterday = yw.roas;
+  const campaignName = sorted.length > 0 ? sorted[0].campaign : '';
+
+  // 1. New campaign (< 3 days data)
+  if (totalDays < 3) {
+    return {
+      status: 'new',
+      label: 'NEW',
+      action: `Day ${totalDays} of 3 -- watching`,
+      actionClass: 'action-new'
+    };
+  }
+
+  // 2. 0 sales after Day 3
+  const totalPurchases = sorted.reduce((s, r) => s + r.purchases, 0);
+  if (totalDays >= 3 && totalPurchases === 0) {
+    return {
+      status: 'turnoff',
+      label: 'TURN OFF',
+      action: '0 sales after Day 3',
+      actionClass: 'action-turnoff'
+    };
+  }
+
+  // 3. Scale vertical: 7d ROAS >= 1.4 AND yesterday >= 1.0
+  if (roas7 >= SCALE_THRESHOLD && roasYesterday >= BREAK_EVEN) {
+    // Check for duplicate eligibility
+    const isDuplicateEligible = /\$50|\$100/i.test(campaignName);
+    const currentSpend = estimateDailyBudget(sorted);
+    const newBudget = Math.round(currentSpend * 1.09);
+
+    if (isDuplicateEligible) {
+      return {
+        status: 'duplicate',
+        label: 'SCALE',
+        action: `Scale 9% → $${newBudget}/day · Then D&D`,
+        actionClass: 'action-scale'
+      };
+    }
+    return {
+      status: 'scale',
+      label: 'SCALE',
+      action: `$${currentSpend} → $${newBudget}/day (+9%)`,
+      actionClass: 'action-scale'
+    };
+  }
+
+  // 4. 7d ROAS >= 1.4 but yesterday < 1.4
+  if (roas7 >= SCALE_THRESHOLD && roasYesterday < SCALE_THRESHOLD) {
+    return {
+      status: 'hold',
+      label: 'HOLD',
+      action: '7d strong but yesterday dipped',
+      actionClass: 'action-hold'
+    };
+  }
+
+  // 5. ROAS 1.25-1.39
+  if (roas7 >= ORANGE_THRESHOLD && roas7 < SCALE_THRESHOLD) {
+    return {
+      status: 'hold',
+      label: 'HOLD',
+      action: `Approaching scale (${roas7.toFixed(2)}x)`,
+      actionClass: 'action-hold'
+    };
+  }
+
+  // 6-8. ROAS 1.0-1.24 — check trend
+  if (roas7 >= BREAK_EVEN && roas7 < ORANGE_THRESHOLD) {
+    const roas14 = d14w.roas;
+    const trendingDown = roas7 < roas14 * 0.95;
+    if (trendingDown) {
+      return {
+        status: 'watch',
+        label: 'WATCH',
+        action: 'Trending down from 14d',
+        actionClass: 'action-watch'
+      };
+    }
+    return {
+      status: 'hold',
+      label: 'HOLD',
+      action: `Stable at ${roas7.toFixed(2)}x`,
+      actionClass: 'action-hold'
+    };
+  }
+
+  // 9. ROAS < 1.0 but yesterday >= 1.0 (recovery)
+  if (roas7 < BREAK_EVEN && roasYesterday >= BREAK_EVEN) {
+    return {
+      status: 'watch',
+      label: 'WATCH',
+      action: 'Below 1.0 but yesterday recovered',
+      actionClass: 'action-watch'
+    };
+  }
+
+  // 10. ROAS < 0.75 AND yesterday < 1.0
+  if (roas7 < TURN_OFF_THRESHOLD && roasYesterday < BREAK_EVEN) {
+    return {
+      status: 'turnoff',
+      label: 'TURN OFF',
+      action: `ROAS ${roas7.toFixed(2)} -- turn off`,
+      actionClass: 'action-turnoff'
+    };
+  }
+
+  // 11. Everything else below 1.0
+  return {
+    status: 'watch',
+    label: 'WATCH',
+    action: `ROAS ${roas7.toFixed(2)} -- monitoring`,
+    actionClass: 'action-watch'
+  };
+}
+
+function estimateDailyBudget(rows) {
+  // Estimate from recent average daily spend
+  const recent = rows.slice(-7);
+  if (recent.length === 0) return 0;
+  const avg = recent.reduce((s, r) => s + r.spend, 0) / recent.length;
+  return Math.round(avg);
+}
+
+// ============================================================
+// GROUP CAMPAIGNS
+// ============================================================
+
+function groupByCampaign(dailyMeta) {
+  const groups = {};
+  dailyMeta.forEach(row => {
+    if (!groups[row.campaign]) groups[row.campaign] = [];
+    groups[row.campaign].push(row);
+  });
+  return groups;
+}
+
+function getCampaignAggregates(campaignRows) {
+  const { start, end } = getDateRange();
+  const rangeRows = campaignRows.filter(r => r.date >= start && r.date <= end);
+  const spend = rangeRows.reduce((s, r) => s + r.spend, 0);
+  const revenue = rangeRows.reduce((s, r) => s + r.purchaseValue, 0);
+  const roas = spend > 0 ? revenue / spend : 0;
+  const profit = revenue - spend;
+  const cpmArr = rangeRows.filter(r => r.cpm > 0);
+  const cpm = cpmArr.length > 0 ? cpmArr.reduce((s, r) => s + r.cpm, 0) / cpmArr.length : 0;
+  return { spend, revenue, roas, profit, cpm };
+}
+
+// ============================================================
+// FILTER CAMPAIGNS BY OFFER
+// ============================================================
+
+function getCampaignsForOffer(dailyMeta, offerName) {
+  // Campaigns whose name contains a match for the offer name
+  // Uses case-insensitive partial match
+  const offerLower = offerName.toLowerCase();
+  const words = offerLower.split(/\s+/).filter(w => w.length > 2);
+  // Build a simplified key from the offer name
+  const seen = new Set();
+  const filtered = [];
+
+  dailyMeta.forEach(row => {
+    const campaignLower = row.campaign.toLowerCase();
+    // Match if campaign contains any significant word from offer name
+    // or if the offer name abbreviation appears (e.g. "WTW" for "What to Wear")
+    const abbreviation = words.map(w => w[0]).join('');
+    const matches = words.some(w => campaignLower.includes(w)) ||
+                    (abbreviation.length >= 2 && campaignLower.includes(abbreviation));
+    if (matches) filtered.push(row);
+  });
+
+  return filtered;
+}
+
+// ============================================================
+// RENDER: SIDEBAR
+// ============================================================
+
+function renderSidebar() {
+  const container = document.getElementById('client-list');
+  container.innerHTML = STATE.clients.map(c => `
+    <div class="sidebar-client ${STATE.activeClient && STATE.activeClient.slug === c.slug ? 'active' : ''}"
+         onclick="selectClient('${c.slug}')">
+      ${c.name}
+    </div>
+  `).join('');
+}
+
+async function selectClient(slug) {
+  const client = STATE.clients.find(c => c.slug === slug);
+  if (!client) return;
+
+  STATE.activeClient = client;
+  STATE.activeOffer = null;
+  STATE.expandedCampaign = null;
+  renderSidebar();
+
+  // Update topbar
+  document.getElementById('topbar-client-name').textContent = client.name;
+  document.getElementById('topbar-client-divider').style.display = '';
+
+  // Show loading
+  document.getElementById('main-content').innerHTML = `
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <div style="font-size:14px; opacity:0.6;">Loading ${client.name} data...</div>
+    </div>`;
+
+  // Fetch if not cached or stale (> 5 min)
+  const cached = STATE.cache[slug];
+  if (!cached || (Date.now() - cached.lastFetch.getTime()) > 300000) {
+    await fetchClientData(slug);
+  }
+
+  renderAccountOverview();
+}
+
+// ============================================================
+// RENDER: ACCOUNT OVERVIEW
+// ============================================================
+
+function renderAccountOverview() {
+  STATE.activeOffer = null;
+  const slug = STATE.activeClient.slug;
+  const data = STATE.cache[slug];
+  if (!data) return;
+
+  const rangeRows = filterByDateRange(data.dailyMeta);
+
+  // Aggregate
+  const totalSpend = rangeRows.reduce((s, r) => s + r.spend, 0);
+  const totalRevenue = rangeRows.reduce((s, r) => s + r.purchaseValue, 0);
+  const overallROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+  const totalProfit = totalRevenue - totalSpend;
+
+  const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
+                     STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+
+  let html = `
+    ${renderDateBar()}
+
+    <div class="cards-row">
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Total Ad Spend</div>
+        <div class="summary-card-value">${formatCurrency(totalSpend)}</div>
+        <div class="summary-card-sub">${rangeLabel}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Total Revenue</div>
+        <div class="summary-card-value">${formatCurrency(totalRevenue)}</div>
+        <div class="summary-card-sub">From purchase logs</div>
+      </div>
+      <div class="summary-card ${overallROAS >= SCALE_THRESHOLD ? 'highlight' : ''}">
+        <div class="summary-card-eyebrow">Overall ROAS</div>
+        <div class="summary-card-value">${overallROAS.toFixed(2)}x</div>
+        <div class="summary-card-sub">${overallROAS >= SCALE_THRESHOLD ? 'Above scale threshold' : overallROAS >= BREAK_EVEN ? 'Above break-even' : 'Below break-even'}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Total Profit</div>
+        <div class="summary-card-value" style="color:${totalProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(totalProfit)}</div>
+        <div class="summary-card-sub">Revenue - Spend</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <div class="chart-title">Performance</div>
+        <div class="chart-toggle">
+          <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setChartMode('spend')">Spend & Revenue</button>
+          <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setChartMode('roas')">ROAS</button>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="main-chart"></canvas>
+      </div>
+    </div>
+
+    <h3 class="section-heading">Offers</h3>
+    <div class="offer-strip">
+      ${renderOfferCards(data)}
+    </div>
+  `;
+
+  document.getElementById('main-content').innerHTML = html;
+
+  // Draw chart after DOM update
+  requestAnimationFrame(() => drawMainChart(rangeRows));
+}
+
+function renderDateBar() {
+  return `
+    <div class="date-bar">
+      <div class="date-toggle">
+        <button class="date-toggle-btn ${STATE.dateRange === '7d' ? 'active' : ''}" onclick="setDateRange('7d')">7-Day</button>
+        <button class="date-toggle-btn ${STATE.dateRange === '30d' ? 'active' : ''}" onclick="setDateRange('30d')">30-Day</button>
+        <button class="date-toggle-btn ${STATE.dateRange === 'custom' ? 'active' : ''}" onclick="setDateRange('custom')">Custom</button>
+      </div>
+      <div class="custom-date-wrap ${STATE.dateRange === 'custom' ? 'show' : ''}" id="custom-dates">
+        <input type="date" id="custom-start" value="${STATE.customStart || dateStr(daysAgo(14))}">
+        <span style="color:var(--ksa-text);opacity:0.5;">to</span>
+        <input type="date" id="custom-end" value="${STATE.customEnd || dateStr(new Date())}">
+        <button class="apply-btn" onclick="applyCustomDates()">Apply</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderOfferCards(data) {
+  if (!data.offers || data.offers.length === 0) {
+    return '<div style="font-size:14px;opacity:0.5;">No offers configured yet. Open Settings to add offers.</div>';
+  }
+
+  return data.offers.map(offerName => {
+    // Get campaigns matching this offer
+    const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+    const rangeRows = filterByDateRange(offerMeta);
+    const spend = rangeRows.reduce((s, r) => s + r.spend, 0);
+    const revenue = rangeRows.reduce((s, r) => s + r.purchaseValue, 0);
+    const roas = spend > 0 ? revenue / spend : 0;
+    const profit = revenue - spend;
+
+    const roasColor = roas >= SCALE_THRESHOLD ? 'var(--ksa-green)' :
+                      roas >= BREAK_EVEN ? 'var(--ksa-flag)' : 'var(--ksa-red)';
+
+    return `
+      <div class="offer-card" onclick="openOfferView('${escapeAttr(offerName)}')">
+        <div class="offer-card-name">${escapeHtml(offerName)}</div>
+        <div class="offer-card-metrics">
+          <div>
+            <div class="offer-card-metric-label">ROAS</div>
+            <div class="offer-card-metric-value" style="color:${roasColor}">${roas.toFixed(2)}x</div>
+          </div>
+          <div>
+            <div class="offer-card-metric-label">Revenue</div>
+            <div class="offer-card-metric-value">${formatCurrency(revenue)}</div>
+          </div>
+          <div>
+            <div class="offer-card-metric-label">Spend</div>
+            <div class="offer-card-metric-value">${formatCurrency(spend)}</div>
+          </div>
+          <div>
+            <div class="offer-card-metric-label">Profit</div>
+            <div class="offer-card-metric-value" style="color:${profit >= 0 ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${formatCurrency(profit)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ============================================================
+// RENDER: OFFER VIEW
+// ============================================================
+
+function openOfferView(offerName) {
+  STATE.activeOffer = offerName;
+  STATE.campaignTab = 'actions';
+  STATE.expandedCampaign = null;
+  renderOfferView();
+}
+
+function renderOfferView() {
+  const slug = STATE.activeClient.slug;
+  const data = STATE.cache[slug];
+  if (!data) return;
+
+  const offerName = STATE.activeOffer;
+
+  // Get matching campaigns
+  const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+  const groups = groupByCampaign(offerMeta);
+
+  // Calculate status for each campaign
+  const campaignStatuses = [];
+  for (const [name, rows] of Object.entries(groups)) {
+    const status = calculateStatus(rows);
+    const agg = getCampaignAggregates(rows);
+    const isChecked = data.checkboxState.some(c => c['Campaign Name'] === name);
+    campaignStatuses.push({ name, rows, ...status, ...agg, isChecked });
+  }
+
+  // Sort: scale/turnoff first, then watch, then hold, then new
+  const statusOrder = { scale: 0, duplicate: 0, turnoff: 1, watch: 2, hold: 3, new: 4 };
+  campaignStatuses.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
+
+  // Filter for tabs
+  const actionCampaigns = campaignStatuses.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
+  const orangeCampaigns = campaignStatuses.filter(c => c.status === 'watch');
+  const newCampaigns = campaignStatuses.filter(c => c.status === 'new');
+
+  let visibleCampaigns;
+  switch (STATE.campaignTab) {
+    case 'actions': visibleCampaigns = actionCampaigns; break;
+    case 'orange': visibleCampaigns = orangeCampaigns; break;
+    case 'new': visibleCampaigns = newCampaigns; break;
+    default: visibleCampaigns = campaignStatuses;
+  }
+
+  // Purchase summary strip
+  const purchaseData = data.purchases[offerName] || [];
+  const configProducts = (data.config || [])
+    .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
+    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+
+  const last7Days = purchaseData
+    .filter(r => r['Date'] >= dateStr(daysAgo(7)))
+    .sort((a, b) => a['Date'].localeCompare(b['Date']));
+
+  let html = `
+    <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
+
+    <h3 class="section-heading">${escapeHtml(offerName)}</h3>
+
+    ${renderPurchaseStrip(configProducts, last7Days)}
+
+    ${renderDateBar()}
+
+    <div class="campaign-tabs">
+      <button class="campaign-tab ${STATE.campaignTab === 'actions' ? 'active' : ''}" onclick="setCampaignTab('actions')">
+        Today's Actions <span class="tab-count">${actionCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'orange' ? 'active' : ''}" onclick="setCampaignTab('orange')">
+        Orange Flags <span class="tab-count">${orangeCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'new' ? 'active' : ''}" onclick="setCampaignTab('new')">
+        New Campaigns <span class="tab-count">${newCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'all' ? 'active' : ''}" onclick="setCampaignTab('all')">
+        All Campaigns <span class="tab-count">${campaignStatuses.length}</span>
+      </button>
+    </div>
+
+    <div class="campaign-table">
+      <div class="campaign-row campaign-row-header">
+        <span></span>
+        <span>Status</span>
+        <span>Campaign</span>
+        <span>ROAS</span>
+        <span>Spend</span>
+        <span>Revenue</span>
+        <span>Profit</span>
+        <span>CPM</span>
+        <span>Action</span>
+      </div>
+      ${visibleCampaigns.length === 0 ? `
+        <div style="padding:24px 16px; text-align:center; font-size:14px; opacity:0.5;">
+          No campaigns in this category.
+        </div>
+      ` : visibleCampaigns.map(c => renderCampaignRow(c)).join('')}
+    </div>
+  `;
+
+  document.getElementById('main-content').innerHTML = html;
+
+  // Draw any expanded mini charts
+  if (STATE.expandedCampaign) {
+    const camp = visibleCampaigns.find(c => c.name === STATE.expandedCampaign);
+    if (camp) {
+      requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
+    }
+  }
+}
+
+function renderPurchaseStrip(products, last7Days) {
+  if (products.length === 0) {
+    return '<div style="margin-bottom:20px;font-size:13px;opacity:0.5;">No products configured for this offer.</div>';
+  }
+
+  // Get the first product as tripwire reference for conversion rate
+  const firstProductName = products[0]['Product Name'];
+
+  // Aggregate last 7 days
+  const totals = {};
+  products.forEach(p => { totals[p['Product Name']] = 0; });
+  let totalTripwire = 0;
+
+  last7Days.forEach(row => {
+    products.forEach(p => {
+      const val = parseNum(row[p['Product Name']] || '0');
+      totals[p['Product Name']] += val;
+    });
+  });
+
+  totalTripwire = totals[firstProductName] || 1; // avoid div by 0
+
+  return `
+    <div class="purchase-strip">
+      ${products.map(p => {
+        const units = totals[p['Product Name']] || 0;
+        const rate = totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) : '--';
+        const isFirst = p['Product Name'] === firstProductName;
+        return `
+          <div class="purchase-cell">
+            <div class="purchase-cell-name">${escapeHtml(p['Product Name'])}</div>
+            <div class="purchase-cell-units">${units}</div>
+            <div class="purchase-cell-rate">${isFirst ? 'Tripwire' : rate + '% conv.'}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderCampaignRow(c) {
+  const isExpanded = STATE.expandedCampaign === c.name;
+  const roasColor = c.roas >= SCALE_THRESHOLD ? 'var(--ksa-green)' :
+                    c.roas >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)';
+  const profitColor = c.profit >= 0 ? 'var(--ksa-text)' : 'var(--ksa-red)';
+
+  return `
+    <div class="campaign-row" onclick="toggleCampaignExpand('${escapeAttr(c.name)}', event)">
+      <input type="checkbox" class="campaign-checkbox" ${c.isChecked ? 'checked' : ''}
+             onclick="event.stopPropagation(); handleCheckbox('${escapeAttr(c.name)}', '${escapeAttr(c.action)}', this.checked)">
+      <span><span class="status-badge status-${c.status}">${c.label}</span></span>
+      <span class="campaign-name-cell" title="${escapeAttr(c.name)}">${escapeHtml(c.name)}</span>
+      <span class="campaign-metric" style="color:${roasColor}">${c.roas.toFixed(2)}x</span>
+      <span class="campaign-metric">${formatCurrency(c.spend)}</span>
+      <span class="campaign-metric">${formatCurrency(c.revenue)}</span>
+      <span class="campaign-metric" style="color:${profitColor}">${formatCurrency(c.profit)}</span>
+      <span class="campaign-metric">${formatCurrency(c.cpm)}</span>
+      <span class="campaign-action ${c.actionClass}">${c.action}</span>
+    </div>
+    <div class="campaign-expand ${isExpanded ? 'open' : ''}" id="expand-${hashStr(c.name)}">
+      <div class="mini-chart-wrap">
+        <canvas id="mini-chart-${hashStr(c.name)}"></canvas>
+      </div>
+    </div>
+  `;
+}
+
+function toggleCampaignExpand(name, event) {
+  if (event.target.type === 'checkbox') return;
+  if (STATE.expandedCampaign === name) {
+    STATE.expandedCampaign = null;
+  } else {
+    STATE.expandedCampaign = name;
+  }
+  renderOfferView();
+
+  if (STATE.expandedCampaign) {
+    const data = STATE.cache[STATE.activeClient.slug];
+    const offerMeta = getCampaignsForOffer(data.dailyMeta, STATE.activeOffer);
+    const groups = groupByCampaign(offerMeta);
+    const rows = groups[name] || [];
+    requestAnimationFrame(() => drawMiniChart(name, rows));
+  }
+}
+
+function handleCheckbox(campaignName, action, checked) {
+  saveCheckbox(campaignName, action, checked);
+  // Update local state
+  const data = STATE.cache[STATE.activeClient.slug];
+  if (checked) {
+    data.checkboxState.push({ 'Campaign Name': campaignName, 'Action': action, 'Date': dateStr(new Date()) });
+  } else {
+    data.checkboxState = data.checkboxState.filter(c => c['Campaign Name'] !== campaignName);
+  }
+}
+
+// ============================================================
+// DATE & TAB INTERACTIONS
+// ============================================================
+
+function setDateRange(range) {
+  STATE.dateRange = range;
+  if (STATE.activeOffer) {
+    renderOfferView();
+  } else {
+    renderAccountOverview();
+  }
+}
+
+function applyCustomDates() {
+  STATE.customStart = document.getElementById('custom-start').value;
+  STATE.customEnd = document.getElementById('custom-end').value;
+  if (STATE.activeOffer) {
+    renderOfferView();
+  } else {
+    renderAccountOverview();
+  }
+}
+
+function setChartMode(mode) {
+  STATE.chartMode = mode;
+  renderAccountOverview();
+}
+
+function setCampaignTab(tab) {
+  STATE.campaignTab = tab;
+  STATE.expandedCampaign = null;
+  renderOfferView();
+}
+
+async function refreshData() {
+  if (!STATE.activeClient) return;
+  showToast('Refreshing data...');
+  await fetchClientData(STATE.activeClient.slug);
+  if (STATE.activeOffer) {
+    renderOfferView();
+  } else {
+    renderAccountOverview();
+  }
+  showToast('Data refreshed');
+}
+
+function updateSyncTime() {
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  if (slug && STATE.cache[slug]) {
+    const t = STATE.cache[slug].lastFetch;
+    const timeStr = t.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    document.getElementById('topbar-sync').textContent = `Last synced: ${timeStr}`;
+  }
+}
+
+// ============================================================
+// CHARTS (Vanilla Canvas)
+// ============================================================
+
+const CHART_COLORS = {
+  pink: '#F77F9F',
+  orange: '#F49656',
+  gridLine: '#F0E8E2',
+  refLine: '#C0C0C0',
+  scaleRef: '#F4A24A',
+  text: '#4C4C4C',
+  green: '#6BAF8A'
+};
+
+function drawMainChart(rangeRows) {
+  const canvas = document.getElementById('main-chart');
+  if (!canvas) return;
+
+  // Aggregate by date
+  const byDate = {};
+  rangeRows.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = { spend: 0, revenue: 0, roas: 0, count: 0, totalRoasWeight: 0 };
+    byDate[r.date].spend += r.spend;
+    byDate[r.date].revenue += r.purchaseValue;
+    byDate[r.date].count++;
+  });
+
+  const dates = Object.keys(byDate).sort();
+  dates.forEach(d => {
+    const day = byDate[d];
+    day.roas = day.spend > 0 ? day.revenue / day.spend : 0;
+  });
+
+  if (dates.length === 0) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * dpr;
+    canvas.height = canvas.offsetHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.font = '14px Lora, serif';
+    ctx.fillStyle = '#999';
+    ctx.textAlign = 'center';
+    ctx.fillText('No data for this date range', canvas.offsetWidth / 2, canvas.offsetHeight / 2);
+    return;
+  }
+
+  if (STATE.chartMode === 'spend') {
+    drawLineChart(canvas, dates, [
+      { data: dates.map(d => byDate[d].spend), color: CHART_COLORS.pink, label: 'Spend' },
+      { data: dates.map(d => byDate[d].revenue), color: CHART_COLORS.orange, label: 'Revenue' }
+    ], { yPrefix: '$', refLines: [] });
+  } else {
+    drawLineChart(canvas, dates, [
+      { data: dates.map(d => byDate[d].roas), color: CHART_COLORS.pink, label: 'ROAS' }
+    ], {
+      ySuffix: 'x',
+      refLines: [
+        { value: BREAK_EVEN, color: CHART_COLORS.refLine, dash: [6, 4], label: '1.0 Break-even' },
+        { value: SCALE_THRESHOLD, color: CHART_COLORS.scaleRef, dash: [6, 4], label: '1.4 Scale' }
+      ]
+    });
+  }
+}
+
+function drawMiniChart(campaignName, rows) {
+  const id = `mini-chart-${hashStr(campaignName)}`;
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const last14 = sorted.slice(-14);
+  const dates = last14.map(r => r.date);
+  const roasData = last14.map(r => r.spend > 0 ? r.purchaseValue / r.spend : 0);
+
+  drawLineChart(canvas, dates, [
+    { data: roasData, color: CHART_COLORS.pink, label: 'ROAS' }
+  ], {
+    ySuffix: 'x',
+    refLines: [
+      { value: BREAK_EVEN, color: CHART_COLORS.refLine, dash: [4, 3] },
+      { value: SCALE_THRESHOLD, color: CHART_COLORS.scaleRef, dash: [4, 3] }
+    ],
+    mini: true
+  });
+}
+
+function drawLineChart(canvas, labels, series, opts = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth;
+  const h = canvas.offsetHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const isMini = opts.mini;
+  const padLeft = isMini ? 36 : 60;
+  const padRight = isMini ? 12 : 20;
+  const padTop = isMini ? 10 : 20;
+  const padBottom = isMini ? 20 : 36;
+
+  const chartW = w - padLeft - padRight;
+  const chartH = h - padTop - padBottom;
+
+  // Determine Y range
+  let allValues = [];
+  series.forEach(s => allValues.push(...s.data));
+  if (opts.refLines) opts.refLines.forEach(r => allValues.push(r.value));
+  let yMin = Math.min(0, ...allValues);
+  let yMax = Math.max(...allValues) * 1.15;
+  if (yMax === yMin) yMax = yMin + 1;
+
+  // Grid
+  const ySteps = isMini ? 3 : 5;
+  ctx.strokeStyle = CHART_COLORS.gridLine;
+  ctx.lineWidth = 1;
+  ctx.font = `${isMini ? 10 : 12}px Lora, serif`;
+  ctx.fillStyle = '#999';
+  ctx.textAlign = 'right';
+
+  for (let i = 0; i <= ySteps; i++) {
+    const val = yMin + (yMax - yMin) * (i / ySteps);
+    const y = padTop + chartH - (chartH * (i / ySteps));
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(padLeft + chartW, y);
+    ctx.stroke();
+
+    let label = '';
+    if (opts.yPrefix) label = opts.yPrefix + formatShort(val);
+    else if (opts.ySuffix) label = val.toFixed(1) + opts.ySuffix;
+    else label = formatShort(val);
+    ctx.fillText(label, padLeft - 6, y + 4);
+  }
+
+  // X labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#999';
+  const maxLabels = isMini ? 4 : 8;
+  const step = Math.max(1, Math.ceil(labels.length / maxLabels));
+  labels.forEach((lbl, i) => {
+    if (i % step !== 0 && i !== labels.length - 1) return;
+    const x = padLeft + (chartW / (labels.length - 1 || 1)) * i;
+    const y = h - (isMini ? 4 : 8);
+    const short = lbl.slice(5); // MM-DD
+    ctx.fillText(short, x, y);
+  });
+
+  // Reference lines
+  if (opts.refLines) {
+    opts.refLines.forEach(ref => {
+      const y = padTop + chartH - ((ref.value - yMin) / (yMax - yMin)) * chartH;
+      ctx.beginPath();
+      ctx.setLineDash(ref.dash || []);
+      ctx.strokeStyle = ref.color;
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(padLeft + chartW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (ref.label && !isMini) {
+        ctx.font = '10px Lora, serif';
+        ctx.fillStyle = ref.color;
+        ctx.textAlign = 'left';
+        ctx.fillText(ref.label, padLeft + chartW + 4, y + 3);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#999';
+        ctx.font = '12px Lora, serif';
+      }
+    });
+  }
+
+  // Lines
+  series.forEach(s => {
+    ctx.beginPath();
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    s.data.forEach((val, i) => {
+      const x = padLeft + (chartW / (labels.length - 1 || 1)) * i;
+      const y = padTop + chartH - ((val - yMin) / (yMax - yMin)) * chartH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Dots
+    s.data.forEach((val, i) => {
+      const x = padLeft + (chartW / (labels.length - 1 || 1)) * i;
+      const y = padTop + chartH - ((val - yMin) / (yMax - yMin)) * chartH;
+      ctx.beginPath();
+      ctx.arc(x, y, isMini ? 2.5 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+    });
+  });
+
+  // Legend (non-mini only)
+  if (!isMini && series.length > 1) {
+    const legendY = padTop - 4;
+    let legendX = padLeft;
+    ctx.font = '12px Lora, serif';
+    series.forEach(s => {
+      ctx.fillStyle = s.color;
+      ctx.beginPath();
+      ctx.arc(legendX, legendY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = CHART_COLORS.text;
+      ctx.textAlign = 'left';
+      ctx.fillText(s.label, legendX + 8, legendY + 4);
+      legendX += ctx.measureText(s.label).width + 30;
+    });
+  }
+}
+
+// ============================================================
+// SETTINGS PANEL
+// ============================================================
+
+function openSettings() {
+  if (!STATE.activeClient) {
+    showToast('Select a client first');
+    return;
+  }
+
+  const client = STATE.activeClient;
+  const data = STATE.cache[client.slug];
+  const config = data ? data.config : [];
+  const offers = data ? data.offers : [];
+
+  // Group products by offer
+  const offerProducts = {};
+  config.forEach(c => {
+    const offer = c['Offer Name'];
+    if (!offerProducts[offer]) offerProducts[offer] = [];
+    offerProducts[offer].push(c);
+  });
+
+  // Sort each offer's products by Position
+  Object.values(offerProducts).forEach(prods => {
+    prods.sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+  });
+
+  let html = `
+    <div class="settings-title">Client Settings</div>
+
+    <div class="settings-section">
+      <div class="settings-label">Client Name</div>
+      <input class="settings-input" id="settings-client-name" value="${escapeAttr(client.name)}">
+
+      <div class="settings-label">Slug</div>
+      <input class="settings-input" id="settings-slug" value="${escapeAttr(client.slug)}" readonly>
+
+      <div class="settings-label">Meta Account IDs</div>
+      <input class="settings-input" id="settings-meta-ids" value="${escapeAttr(client.metaIds)}" placeholder="Comma-separated account IDs">
+
+      <button class="ksa-btn" onclick="saveClientSettings()" style="margin-top:4px;">Save Client</button>
+    </div>
+
+    <div class="settings-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="settings-title" style="margin-bottom:0;">Offers</div>
+        <button class="small-btn small-btn-pink" onclick="openAddOffer()">+ Add Offer</button>
+      </div>
+
+      ${offers.map(offerName => {
+        const products = offerProducts[offerName] || [];
+        return `
+          <div class="offer-block">
+            <div class="offer-block-header">
+              <div class="offer-block-name">${escapeHtml(offerName)}</div>
+              <div class="offer-block-actions">
+                <button class="small-btn small-btn-outline" onclick="openAddProduct('${escapeAttr(offerName)}')">+ Product</button>
+              </div>
+            </div>
+            ${products.map((p, idx) => `
+              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}">
+                <span class="product-drag" title="Drag to reorder">&#9776;</span>
+                <span class="product-name">${escapeHtml(p['Product Name'])}</span>
+                <span class="product-price">${formatCurrency(parseNum(p['Current Price']))}</span>
+                <button class="product-price-btn" onclick="openChangePrice('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(p['Current Price'])}')">Change</button>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).join('')}
+
+      ${offers.length === 0 ? '<div style="font-size:14px;opacity:0.5;">No offers yet. Click "+ Add Offer" above.</div>' : ''}
+    </div>
+  `;
+
+  document.getElementById('settings-content').innerHTML = html;
+  document.getElementById('settings-overlay').classList.add('show');
+  document.getElementById('settings-panel').classList.add('open');
+
+  // Set up drag and drop for product reordering
+  setupProductDragDrop();
+}
+
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('show');
+  document.getElementById('settings-panel').classList.remove('open');
+}
+
+function setupProductDragDrop() {
+  const dragHandles = document.querySelectorAll('.product-drag');
+  let draggedRow = null;
+
+  dragHandles.forEach(handle => {
+    const row = handle.parentElement;
+    row.draggable = true;
+
+    row.addEventListener('dragstart', (e) => {
+      draggedRow = row;
+      row.style.opacity = '0.5';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    row.addEventListener('dragend', () => {
+      row.style.opacity = '1';
+      draggedRow = null;
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedRow || draggedRow === row) return;
+
+      const parent = row.parentElement;
+      const rows = [...parent.querySelectorAll('.product-row')];
+      const dragIndex = rows.indexOf(draggedRow);
+      const dropIndex = rows.indexOf(row);
+
+      if (dragIndex < dropIndex) {
+        parent.insertBefore(draggedRow, row.nextSibling);
+      } else {
+        parent.insertBefore(draggedRow, row);
+      }
+
+      // Save new order
+      const offerName = row.dataset.offer;
+      saveProductOrder(offerName);
+    });
+  });
+}
+
+async function saveProductOrder(offerName) {
+  const rows = document.querySelectorAll(`.product-row[data-offer="${offerName}"]`);
+  const products = [];
+  rows.forEach((row, i) => {
+    products.push({
+      name: row.querySelector('.product-name').textContent.trim(),
+      position: i + 1,
+      currentPrice: row.querySelector('.product-price').textContent.trim().replace('$', '').replace(',', ''),
+      active: 'Yes'
+    });
+  });
+
+  await postToWebApp('save_config', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    products
+  });
+
+  // Refresh client data
+  await fetchClientData(STATE.activeClient.slug);
+}
+
+async function saveClientSettings() {
+  const name = document.getElementById('settings-client-name').value;
+  const metaIds = document.getElementById('settings-meta-ids').value;
+
+  // Update via web app
+  await postToWebApp('save_config', {
+    clientSlug: STATE.activeClient.slug,
+    clientName: name,
+    metaAccountIds: metaIds
+  });
+
+  // Update local state
+  STATE.activeClient.name = name;
+  STATE.activeClient.metaIds = metaIds;
+  renderSidebar();
+  document.getElementById('topbar-client-name').textContent = name;
+}
+
+// ============================================================
+// MODALS: Change Price, Add Offer, Add Product, Add Client
+// ============================================================
+
+function openChangePrice(offerName, productName, currentPrice) {
+  const html = `
+    <div class="modal-title">Change Price</div>
+    <p style="font-size:14px;margin-bottom:16px;">${escapeHtml(productName)} in ${escapeHtml(offerName)}</p>
+
+    <div class="modal-label">Current Price</div>
+    <input class="modal-input" value="${escapeAttr(currentPrice)}" readonly style="background:#F8F6F4;color:#999;">
+
+    <div class="modal-label">New Price</div>
+    <input class="modal-input" id="modal-new-price" type="number" step="0.01" placeholder="0.00">
+
+    <div class="modal-label">Effective Date</div>
+    <input class="modal-input" id="modal-effective-date" type="date" value="${dateStr(new Date())}">
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitPriceChange('${escapeAttr(offerName)}', '${escapeAttr(productName)}')">Save</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitPriceChange(offerName, productName) {
+  const newPrice = document.getElementById('modal-new-price').value;
+  const effectiveDate = document.getElementById('modal-effective-date').value;
+
+  if (!newPrice || !effectiveDate) {
+    showToast('Please fill in all fields');
+    return;
+  }
+
+  await postToWebApp('save_price_change', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    productName,
+    newPrice: parseFloat(newPrice),
+    effectiveDate
+  });
+
+  closeModal();
+  await fetchClientData(STATE.activeClient.slug);
+  openSettings(); // Refresh settings panel
+}
+
+function openAddOffer() {
+  const html = `
+    <div class="modal-title">Add Offer</div>
+
+    <div class="modal-label">Offer Name</div>
+    <input class="modal-input" id="modal-offer-name" placeholder="e.g. What to Wear Tiny Offer">
+
+    <div id="modal-products-list">
+      <div class="modal-label">Product 1</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product name" data-product-name>
+        <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-product-price>
+      </div>
+    </div>
+
+    <button class="small-btn small-btn-outline" onclick="addProductField()" style="margin-bottom:20px;">+ Another Product</button>
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitAddOffer()">Create Offer</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function addProductField() {
+  const container = document.getElementById('modal-products-list');
+  const count = container.querySelectorAll('[data-product-name]').length + 1;
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div class="modal-label">Product ${count}</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product name" data-product-name>
+      <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-product-price>
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+async function submitAddOffer() {
+  const offerName = document.getElementById('modal-offer-name').value.trim();
+  if (!offerName) { showToast('Enter an offer name'); return; }
+
+  const nameInputs = document.querySelectorAll('[data-product-name]');
+  const priceInputs = document.querySelectorAll('[data-product-price]');
+  const products = [];
+
+  nameInputs.forEach((input, i) => {
+    const name = input.value.trim();
+    const price = parseFloat(priceInputs[i].value) || 0;
+    if (name) {
+      products.push({ name, position: i + 1, price });
+    }
+  });
+
+  if (products.length === 0) { showToast('Add at least one product'); return; }
+
+  await postToWebApp('setup_new_offer', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    products
+  });
+
+  closeModal();
+  await fetchClientData(STATE.activeClient.slug);
+  openSettings();
+}
+
+function openAddProduct(offerName) {
+  const html = `
+    <div class="modal-title">Add Product to ${escapeHtml(offerName)}</div>
+
+    <div class="modal-label">Product Name</div>
+    <input class="modal-input" id="modal-product-name" placeholder="e.g. Upsell 3">
+
+    <div class="modal-label">Price</div>
+    <input class="modal-input" id="modal-product-price" type="number" step="0.01" placeholder="0.00">
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitAddProduct('${escapeAttr(offerName)}')">Add Product</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitAddProduct(offerName) {
+  const productName = document.getElementById('modal-product-name').value.trim();
+  const price = parseFloat(document.getElementById('modal-product-price').value);
+
+  if (!productName || isNaN(price)) { showToast('Fill in all fields'); return; }
+
+  const data = STATE.cache[STATE.activeClient.slug];
+  const existingProducts = (data.config || [])
+    .filter(c => c['Offer Name'] === offerName)
+    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+
+  const newPosition = existingProducts.length + 1;
+
+  const products = existingProducts.map(p => ({
+    name: p['Product Name'],
+    position: parseInt(p['Position']),
+    currentPrice: p['Current Price'],
+    active: p['Active']
+  }));
+
+  products.push({
+    name: productName,
+    position: newPosition,
+    currentPrice: price.toString(),
+    active: 'Yes'
+  });
+
+  await postToWebApp('save_config', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    products
+  });
+
+  // Also add to price history
+  await postToWebApp('save_price_change', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    productName,
+    newPrice: price,
+    effectiveDate: dateStr(new Date())
+  });
+
+  closeModal();
+  await fetchClientData(STATE.activeClient.slug);
+  openSettings();
+}
+
+function openAddClient() {
+  const html = `
+    <div class="modal-title">Add New Client</div>
+
+    <div class="modal-label">Client Name</div>
+    <input class="modal-input" id="modal-client-name" placeholder="e.g. Hope Taylor Photography">
+
+    <div class="modal-label">Slug</div>
+    <input class="modal-input" id="modal-client-slug" placeholder="e.g. htp (lowercase, no spaces)">
+
+    <div class="modal-label">Meta Account IDs</div>
+    <input class="modal-input" id="modal-client-meta" placeholder="Comma-separated (e.g. act_123456, act_789012)">
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitAddClient()">Create Client</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitAddClient() {
+  const name = document.getElementById('modal-client-name').value.trim();
+  const slug = document.getElementById('modal-client-slug').value.trim().toLowerCase();
+  const metaIds = document.getElementById('modal-client-meta').value.trim();
+
+  if (!name || !slug) { showToast('Name and slug are required'); return; }
+
+  await postToWebApp('setup_new_client', {
+    clientName: name,
+    slug,
+    metaAccountIds: metaIds
+  });
+
+  closeModal();
+  await fetchClients();
+  showToast(`${name} added`);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+
+function formatCurrency(val) {
+  if (val === undefined || val === null || isNaN(val)) return '$0';
+  const neg = val < 0;
+  const abs = Math.abs(val);
+  let formatted;
+  if (abs >= 10000) {
+    formatted = '$' + (abs / 1000).toFixed(1) + 'k';
+  } else if (abs >= 1000) {
+    formatted = '$' + abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  } else {
+    formatted = '$' + abs.toFixed(abs < 10 ? 2 : 0);
+  }
+  return neg ? '-' + formatted : formatted;
+}
+
+function formatShort(val) {
+  if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'k';
+  if (Math.abs(val) >= 1) return val.toFixed(0);
+  return val.toFixed(2);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function hashStr(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+async function init() {
+  await fetchClients();
+  updateSyncTime();
+}
+
+init();
+</script>
+
+</body>
+</html>
