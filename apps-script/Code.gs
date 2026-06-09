@@ -6,6 +6,10 @@
  * 2. Checkbox state clearing (runs after daily pull)
  * 3. Web app endpoint for dashboard writes (config, prices, checkboxes, new clients/offers)
  *
+ * NAMING CONVENTION: All tab names and Price History rows use the client SLUG (e.g. "htp"),
+ * not the full client name. This keeps tab names short and consistent.
+ * Tab examples: "htp - Daily Meta", "htp - Config", "htp - What to Wear Tiny Offer Purchases"
+ *
  * SCRIPT PROPERTIES (set once in Project Settings > Script Properties):
  *   META_TOKEN    — Meta System User access token (ads_read permission)
  *   SHEET_ID      — Google Sheet ID
@@ -58,10 +62,11 @@ function runDailyPull() {
   const clientData = clientsSheet.getDataRange().getValues();
   const headers = clientData[0];
   const nameCol = headers.indexOf('Client Name');
+  const slugCol = headers.indexOf('Slug');
   const accountCol = headers.indexOf('Meta Account ID(s)');
   const statusCol = headers.indexOf('Status');
 
-  if (nameCol === -1 || accountCol === -1 || statusCol === -1) {
+  if (nameCol === -1 || slugCol === -1 || accountCol === -1 || statusCol === -1) {
     Logger.log('ERROR: Required columns not found in Clients tab');
     return;
   }
@@ -70,21 +75,22 @@ function runDailyPull() {
   for (let i = 1; i < clientData.length; i++) {
     const row = clientData[i];
     const clientName = row[nameCol];
+    const slug = String(row[slugCol]).trim();
     const accountIds = String(row[accountCol]).trim();
     const status = String(row[statusCol]).trim();
 
-    if (status !== 'Active' || !clientName || !accountIds) continue;
+    if (status !== 'Active' || !slug || !accountIds) continue;
 
-    Logger.log('Pulling data for: ' + clientName);
+    Logger.log('Pulling data for: ' + clientName + ' (' + slug + ')');
 
     // Split multiple account IDs by comma
     const ids = accountIds.split(',').map(function(id) { return id.trim(); });
 
-    // Get or create the Daily Meta tab
-    const tabName = clientName + ' - Daily Meta';
+    // Get or create the Daily Meta tab using SLUG
+    const tabName = slug + ' - Daily Meta';
     let metaSheet = ss.getSheetByName(tabName);
     if (!metaSheet) {
-      metaSheet = createDailyMetaTab_(ss, clientName);
+      metaSheet = createDailyMetaTab_(ss, slug);
     }
 
     // Pull data for each account
@@ -95,7 +101,7 @@ function runDailyPull() {
       try {
         pullAccountData_(metaSheet, accountId, config.META_TOKEN);
       } catch (e) {
-        Logger.log('ERROR pulling account ' + accountId + ' for ' + clientName + ': ' + e.message);
+        Logger.log('ERROR pulling account ' + accountId + ' for ' + slug + ': ' + e.message);
       }
     }
   }
@@ -310,15 +316,15 @@ function doGet(e) {
 // ============================================
 
 /**
- * save_config — Write offer/product changes to [Client Name] - Config tab
+ * save_config — Write offer/product changes to [slug] - Config tab
  * Payload: { clientSlug, offerName, products: [{name, position, currentPrice, active}] }
  */
 function handleSaveConfig_(payload) {
   const ss = getSheet_();
-  const clientName = getClientNameBySlug_(ss, payload.clientSlug);
-  if (!clientName) return { success: false, error: 'Client not found: ' + payload.clientSlug };
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
 
-  const tabName = clientName + ' - Config';
+  const tabName = slug + ' - Config';
   var configSheet = ss.getSheetByName(tabName);
   if (!configSheet) return { success: false, error: 'Config tab not found: ' + tabName };
 
@@ -327,7 +333,6 @@ function handleSaveConfig_(payload) {
 
   // Get existing data
   var data = configSheet.getDataRange().getValues();
-  var headers = data[0];
 
   // For each product in the payload, find and update or append
   for (var p = 0; p < products.length; p++) {
@@ -362,27 +367,28 @@ function handleSaveConfig_(payload) {
 
 
 /**
- * save_price_change — Append row to Price History tab
+ * save_price_change — Append row to Price History tab (uses SLUG as client identifier)
  * Payload: { clientSlug, offerName, productName, newPrice, effectiveDate }
  */
 function handleSavePriceChange_(payload) {
   const ss = getSheet_();
-  const clientName = getClientNameBySlug_(ss, payload.clientSlug);
-  if (!clientName) return { success: false, error: 'Client not found: ' + payload.clientSlug };
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
 
   var priceSheet = ss.getSheetByName('Price History');
   if (!priceSheet) return { success: false, error: 'Price History tab not found' };
 
+  // Use SLUG in Price History, not full client name
   priceSheet.appendRow([
-    clientName,
+    slug,
     payload.offerName,
     payload.productName,
     Number(payload.newPrice),
     payload.effectiveDate || new Date().toISOString().split('T')[0]
   ]);
 
-  // Also update current price in Config tab
-  var configTab = clientName + ' - Config';
+  // Also update current price in Config tab (uses slug for tab name)
+  var configTab = slug + ' - Config';
   var configSheet = ss.getSheetByName(configTab);
   if (configSheet) {
     var configData = configSheet.getDataRange().getValues();
@@ -430,7 +436,7 @@ function handleSaveCheckboxState_(payload) {
 
 
 /**
- * setup_new_client — Add to Clients tab, create Daily Meta + Config tabs
+ * setup_new_client — Add to Clients tab, create Daily Meta + Config tabs using SLUG
  * Payload: { clientName, slug, metaAccountIds }
  */
 function handleSetupNewClient_(payload) {
@@ -456,24 +462,22 @@ function handleSetupNewClient_(payload) {
     ''
   ]);
 
-  // Create Daily Meta tab
-  createDailyMetaTab_(ss, payload.clientName);
+  // Create Daily Meta and Config tabs using SLUG
+  createDailyMetaTab_(ss, payload.slug);
+  createConfigTab_(ss, payload.slug);
 
-  // Create Config tab
-  createConfigTab_(ss, payload.clientName);
-
-  return { success: true, message: 'Client created: ' + payload.clientName };
+  return { success: true, message: 'Client created: ' + payload.clientName + ' (' + payload.slug + ')' };
 }
 
 
 /**
- * setup_new_offer — Create Purchases tab, add to Config, add to Price History
+ * setup_new_offer — Create Purchases tab, add to Config, add to Price History (all using SLUG)
  * Payload: { clientSlug, offerName, products: [{name, position, price}] }
  */
 function handleSetupNewOffer_(payload) {
   const ss = getSheet_();
-  const clientName = getClientNameBySlug_(ss, payload.clientSlug);
-  if (!clientName) return { success: false, error: 'Client not found: ' + payload.clientSlug };
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
 
   var products = payload.products;
   if (!products || products.length === 0) return { success: false, error: 'No products provided' };
@@ -481,8 +485,8 @@ function handleSetupNewOffer_(payload) {
   // Sort products by position
   products.sort(function(a, b) { return (a.position || 0) - (b.position || 0); });
 
-  // Create Purchases tab
-  var purchasesTabName = clientName + ' - ' + payload.offerName + ' Purchases';
+  // Create Purchases tab using SLUG
+  var purchasesTabName = slug + ' - ' + payload.offerName + ' Purchases';
   var existingTab = ss.getSheetByName(purchasesTabName);
   if (existingTab) {
     return { success: false, error: 'Purchases tab already exists: ' + purchasesTabName };
@@ -502,11 +506,11 @@ function handleSetupNewOffer_(payload) {
   // Bold the header row
   purchasesSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
 
-  // Add to Config tab
-  var configTabName = clientName + ' - Config';
+  // Add to Config tab using SLUG
+  var configTabName = slug + ' - Config';
   var configSheet = ss.getSheetByName(configTabName);
   if (!configSheet) {
-    configSheet = createConfigTab_(ss, clientName);
+    configSheet = createConfigTab_(ss, slug);
   }
 
   for (var c = 0; c < products.length; c++) {
@@ -519,13 +523,13 @@ function handleSetupNewOffer_(payload) {
     ]);
   }
 
-  // Add to Price History
+  // Add to Price History using SLUG
   var priceSheet = ss.getSheetByName('Price History');
   if (priceSheet) {
     var today = new Date().toISOString().split('T')[0];
     for (var h = 0; h < products.length; h++) {
       priceSheet.appendRow([
-        clientName,
+        slug,
         payload.offerName,
         products[h].name,
         Number(products[h].price) || 0,
@@ -543,10 +547,10 @@ function handleSetupNewOffer_(payload) {
 // ============================================
 
 /**
- * Create the Daily Meta tab for a client with correct headers.
+ * Create the Daily Meta tab for a client using their SLUG.
  */
-function createDailyMetaTab_(ss, clientName) {
-  var tabName = clientName + ' - Daily Meta';
+function createDailyMetaTab_(ss, slug) {
+  var tabName = slug + ' - Daily Meta';
   var existing = ss.getSheetByName(tabName);
   if (existing) return existing;
 
@@ -562,10 +566,10 @@ function createDailyMetaTab_(ss, clientName) {
 }
 
 /**
- * Create the Config tab for a client with correct headers.
+ * Create the Config tab for a client using their SLUG.
  */
-function createConfigTab_(ss, clientName) {
-  var tabName = clientName + ' - Config';
+function createConfigTab_(ss, slug) {
+  var tabName = slug + ' - Config';
   var existing = ss.getSheetByName(tabName);
   if (existing) return existing;
 
@@ -581,6 +585,22 @@ function createConfigTab_(ss, clientName) {
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
+
+/**
+ * Look up a client's slug from their full name.
+ */
+function getSlugByClientName_(ss, clientName) {
+  var clientsSheet = ss.getSheetByName('Clients');
+  if (!clientsSheet) return null;
+
+  var data = clientsSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === clientName) {
+      return data[i][1];
+    }
+  }
+  return null;
+}
 
 /**
  * Look up a client's full name from their slug.
@@ -606,7 +626,7 @@ function getClientNameBySlug_(ss, slug) {
 /**
  * Run this ONCE to create the base sheet structure.
  * Creates: Clients, Price History, CHECKBOX_STATE tabs with headers.
- * Then manually add your clients or use setup_new_client from the dashboard.
+ * Price History uses "Slug" as the first column (not "Client Name").
  */
 function initialSetup() {
   const ss = getSheet_();
@@ -619,11 +639,11 @@ function initialSetup() {
     clientsSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
   }
 
-  // --- Price History tab ---
+  // --- Price History tab (first column is Slug, not Client Name) ---
   var priceSheet = ss.getSheetByName('Price History');
   if (!priceSheet) {
     priceSheet = ss.insertSheet('Price History');
-    priceSheet.getRange(1, 1, 1, 5).setValues([['Client Name', 'Offer Name', 'Product Name', 'Price', 'Effective Date']]);
+    priceSheet.getRange(1, 1, 1, 5).setValues([['Slug', 'Offer Name', 'Product Name', 'Price', 'Effective Date']]);
     priceSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
   }
 
@@ -635,13 +655,14 @@ function initialSetup() {
     checkboxSheet.getRange(1, 1, 1, 4).setFontWeight('bold');
   }
 
-  Logger.log('Base tabs created. Now add clients via the Clients tab or use setup_new_client.');
+  Logger.log('Base tabs created. Now run seedClients() to add clients.');
 }
 
 
 /**
  * Seed the known KSA clients. Run ONCE after initialSetup.
- * Meta Account IDs are placeholders — Rebecca needs to fill these in.
+ * Creates per-client tabs using SLUGS (e.g. "htp - Daily Meta", not "Hope Taylor Photography - Daily Meta").
+ * Meta Account IDs are blank — Rebecca needs to fill these in.
  */
 function seedClients() {
   const ss = getSheet_();
@@ -667,13 +688,14 @@ function seedClients() {
 
   clientsSheet.getRange(2, 1, clients.length, clients[0].length).setValues(clients);
 
-  // Create per-client tabs
+  // Create per-client tabs using SLUGS
   for (var i = 0; i < clients.length; i++) {
-    createDailyMetaTab_(ss, clients[i][0]);
-    createConfigTab_(ss, clients[i][0]);
+    var slug = clients[i][1]; // Slug is column index 1
+    createDailyMetaTab_(ss, slug);
+    createConfigTab_(ss, slug);
   }
 
-  Logger.log('Seeded ' + clients.length + ' clients with Daily Meta and Config tabs');
+  Logger.log('Seeded ' + clients.length + ' clients with Daily Meta and Config tabs (using slugs)');
 }
 
 
@@ -681,8 +703,6 @@ function seedClients() {
  * Seed HTP offers (confirmed from spreadsheet). Run ONCE after seedClients.
  */
 function seedHTPOffers() {
-  const ss = getSheet_();
-
   // What to Wear Tiny Offer
   handleSetupNewOffer_({
     clientSlug: 'htp',
