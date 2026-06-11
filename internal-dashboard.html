@@ -1352,6 +1352,7 @@ let STATE = {
   chartMode: 'spend',     // 'spend' or 'roas'
   campaignTab: 'actions',  // 'actions', 'orange', 'new', 'all'
   expandedCampaign: null,
+  purchaseLogPage: 0,     // pagination for purchase log
 
   // Cached data per client slug
   cache: {},
@@ -1488,6 +1489,22 @@ function dateStr(d) {
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
+  return d;
+}
+
+// Normalize dates like "6/9/2026" or "06/09/2026" to "2026-06-09" for comparison
+function normalizeDateStr(d) {
+  if (!d) return '';
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // M/D/YYYY or MM/DD/YYYY
+  const parts = d.split('/');
+  if (parts.length === 3) {
+    const month = parts[0].padStart(2, '0');
+    const day = parts[1].padStart(2, '0');
+    const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+    return year + '-' + month + '-' + day;
+  }
   return d;
 }
 
@@ -1948,6 +1965,7 @@ function openOfferView(offerName) {
   STATE.activeOffer = offerName;
   STATE.campaignTab = 'actions';
   STATE.expandedCampaign = null;
+  STATE.purchaseLogPage = 0;
   renderOfferView();
 }
 
@@ -1988,15 +2006,24 @@ function renderOfferView() {
     default: visibleCampaigns = campaignStatuses;
   }
 
-  // Purchase summary strip
+  // Purchase summary strip — use selected date range
   const purchaseData = data.purchases[offerName] || [];
   const configProducts = (data.config || [])
     .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
     .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
 
-  const last7Days = purchaseData
-    .filter(r => r['Date'] >= dateStr(daysAgo(7)))
-    .sort((a, b) => a['Date'].localeCompare(b['Date']));
+  const { start: rangeStart, end: rangeEnd } = getDateRange();
+  const rangePurchases = purchaseData
+    .filter(r => {
+      const d = r['Date'] || '';
+      // Handle M/D/YYYY dates by normalizing to YYYY-MM-DD for comparison
+      const normalized = normalizeDateStr(d);
+      return normalized >= rangeStart && normalized <= rangeEnd;
+    })
+    .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
+
+  // Get offer-specific campaign data for chart
+  const offerRangeRows = filterByDateRange(offerMeta);
 
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
@@ -2006,11 +2033,24 @@ function renderOfferView() {
       <button class="ksa-btn" onclick="openLogPurchaseModal('${escapeAttr(offerName)}')">+ Log Purchase</button>
     </div>
 
-    ${renderPurchaseStrip(configProducts, last7Days)}
+    ${renderDateBar()}
+
+    ${renderPurchaseStrip(configProducts, rangePurchases)}
+
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <div class="chart-title">Offer Performance</div>
+        <div class="chart-toggle">
+          <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
+          <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="offer-chart"></canvas>
+      </div>
+    </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
-
-    ${renderDateBar()}
 
     <div class="campaign-tabs">
       <button class="campaign-tab ${STATE.campaignTab === 'actions' ? 'active' : ''}" onclick="setCampaignTab('actions')">
@@ -2048,6 +2088,9 @@ function renderOfferView() {
   `;
 
   document.getElementById('main-content').innerHTML = html;
+
+  // Draw offer performance chart
+  requestAnimationFrame(() => drawOfferChart(offerRangeRows));
 
   // Draw any expanded mini charts
   if (STATE.expandedCampaign) {
@@ -2271,6 +2314,59 @@ function drawMainChart(rangeRows) {
       ]
     });
   }
+}
+
+function drawOfferChart(rangeRows) {
+  const canvas = document.getElementById('offer-chart');
+  if (!canvas) return;
+
+  // Aggregate by date
+  const byDate = {};
+  rangeRows.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = { spend: 0, revenue: 0 };
+    byDate[r.date].spend += r.spend;
+    byDate[r.date].revenue += r.purchaseValue;
+  });
+
+  const dates = Object.keys(byDate).sort();
+  dates.forEach(d => {
+    byDate[d].roas = byDate[d].spend > 0 ? byDate[d].revenue / byDate[d].spend : 0;
+  });
+
+  if (dates.length === 0) {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * dpr;
+    canvas.height = canvas.offsetHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.font = '14px Lora, serif';
+    ctx.fillStyle = '#999';
+    ctx.textAlign = 'center';
+    ctx.fillText('No data for this date range', canvas.offsetWidth / 2, canvas.offsetHeight / 2);
+    return;
+  }
+
+  if (STATE.chartMode === 'spend') {
+    drawLineChart(canvas, dates, [
+      { data: dates.map(d => byDate[d].spend), color: CHART_COLORS.pink, label: 'Spend' },
+      { data: dates.map(d => byDate[d].revenue), color: CHART_COLORS.orange, label: 'Revenue' }
+    ], { yPrefix: '$', refLines: [] });
+  } else {
+    drawLineChart(canvas, dates, [
+      { data: dates.map(d => byDate[d].roas), color: CHART_COLORS.pink, label: 'ROAS' }
+    ], {
+      ySuffix: 'x',
+      refLines: [
+        { value: BREAK_EVEN, color: CHART_COLORS.refLine, dash: [6, 4], label: '1.0 Break-even' },
+        { value: SCALE_THRESHOLD, color: CHART_COLORS.scaleRef, dash: [6, 4], label: '1.4 Scale' }
+      ]
+    });
+  }
+}
+
+function setOfferChartMode(mode) {
+  STATE.chartMode = mode;
+  renderOfferView();
 }
 
 function drawMiniChart(campaignName, rows) {
@@ -3014,13 +3110,20 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
   if (configProducts.length === 0) return '';
 
   const productNames = configProducts.map(p => p['Product Name']);
+  const PAGE_SIZE = 15;
 
-  // Sort purchase data by date descending (most recent first)
-  const sorted = [...purchaseData].sort((a, b) => (b['Date'] || '').localeCompare(a['Date'] || ''));
+  // Sort purchase data by date descending (most recent first) using normalized dates
+  const sorted = [...purchaseData].sort((a, b) => {
+    const da = normalizeDateStr(a['Date'] || '');
+    const db = normalizeDateStr(b['Date'] || '');
+    return db.localeCompare(da);
+  });
 
-  // Limit to last 30 rows for display, with option to show all
-  const displayRows = sorted.slice(0, 30);
-  const hasMore = sorted.length > 30;
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const page = Math.min(STATE.purchaseLogPage, Math.max(0, totalPages - 1));
+  STATE.purchaseLogPage = page;
+  const startIdx = page * PAGE_SIZE;
+  const displayRows = sorted.slice(startIdx, startIdx + PAGE_SIZE);
 
   return `
     <div class="purchase-log">
@@ -3049,7 +3152,6 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
                 ${displayRows.map(row => {
                   const totalUnits = parseNum(row['Total Units'] || '0');
                   const totalRevenue = parseNum(row['Total Revenue'] || '0');
-                  // Format date nicely
                   const dateVal = row['Date'] || '';
                   const dateParts = dateVal.split('/');
                   const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
@@ -3067,7 +3169,15 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
               </tbody>
             </table>
           </div>
-          ${hasMore ? `<div style="padding:12px 24px;text-align:center;font-size:12px;opacity:0.5;">Showing 30 of ${sorted.length} entries</div>` : ''}
+          ${totalPages > 1 ? `
+            <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 24px;border-top:1px solid var(--ksa-border);">
+              <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(-1)" ${page === 0 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>&#8592; Prev</button>
+              <span style="font-family:var(--font-body);font-size:13px;color:var(--ksa-text);">
+                Page ${page + 1} of ${totalPages}
+              </span>
+              <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(1)" ${page >= totalPages - 1 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>Next &#8594;</button>
+            </div>
+          ` : ''}
         `}
       </div>
     </div>
@@ -3085,6 +3195,20 @@ function togglePurchaseLog() {
     body.classList.add('open');
     arrow.classList.add('open');
   }
+}
+
+function changePurchaseLogPage(delta) {
+  STATE.purchaseLogPage += delta;
+  renderOfferView();
+  // Re-open the purchase log after re-render
+  requestAnimationFrame(() => {
+    const body = document.getElementById('pl-body');
+    const arrow = document.getElementById('pl-arrow');
+    if (body && arrow) {
+      body.classList.add('open');
+      arrow.classList.add('open');
+    }
+  });
 }
 
 // ============================================================

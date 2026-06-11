@@ -183,7 +183,8 @@ function pullAccountData_(metaSheet, accountId, token, dateMode) {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     var since = Utilities.formatDate(thirtyDaysAgo, 'America/Chicago', 'yyyy-MM-dd');
     var until = Utilities.formatDate(today, 'America/Chicago', 'yyyy-MM-dd');
-    datePart = '&time_range={"since":"' + since + '","until":"' + until + '"}&time_increment=1';
+    var timeRangeJson = '{"since":"' + since + '","until":"' + until + '"}';
+    datePart = '&time_range=' + encodeURIComponent(timeRangeJson) + '&time_increment=1';
   } else {
     datePart = '&date_preset=yesterday';
   }
