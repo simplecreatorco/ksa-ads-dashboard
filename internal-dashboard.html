@@ -975,7 +975,7 @@
       background: var(--ksa-white);
       border-radius: 14px;
       padding: 32px;
-      width: 420px;
+      width: 520px;
       max-width: 90vw;
       box-shadow: 0 8px 32px rgba(0,0,0,0.15);
     }
@@ -1058,85 +1058,131 @@
     .edit-icon-btn:hover { opacity: 1; }
 
     /* ============================================
-       PURCHASE ENTRY FORM
+       PURCHASE LOG (day-by-day table)
        ============================================ */
-    .purchase-entry {
+    .purchase-log {
       background: var(--ksa-white);
       border-radius: 14px;
       border: 1.5px solid var(--ksa-border);
-      padding: 24px;
       margin-bottom: 24px;
+      overflow: hidden;
     }
 
-    .purchase-entry-header {
+    .purchase-log-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 16px 24px;
       cursor: pointer;
-      margin-bottom: 0;
+      transition: background 0.15s;
     }
 
-    .purchase-entry-header.open { margin-bottom: 20px; }
+    .purchase-log-header:hover { background: #FEFCFA; }
 
-    .purchase-entry-title {
+    .purchase-log-title {
       font-family: var(--font-heading);
       font-weight: 700;
       font-size: 17px;
       color: var(--ksa-text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .purchase-entry-toggle {
+    .purchase-log-arrow {
+      font-size: 12px;
+      color: var(--ksa-pink);
+      transition: transform 0.2s;
+    }
+
+    .purchase-log-arrow.open { transform: rotate(90deg); }
+
+    .purchase-log-body {
+      display: none;
+      border-top: 1px solid var(--ksa-border);
+    }
+
+    .purchase-log-body.open { display: block; }
+
+    .purchase-log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .purchase-log-table th {
       font-family: var(--font-label);
       font-size: 12px;
+      text-transform: uppercase;
       letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--ksa-pink);
-      background: none;
-      border: none;
-      cursor: pointer;
+      color: var(--ksa-text);
+      opacity: 0.5;
+      padding: 10px 12px;
+      text-align: right;
+      background: #FAFAF8;
+      border-bottom: 1px solid var(--ksa-border);
+      white-space: nowrap;
     }
 
-    .purchase-entry-body { display: none; }
-    .purchase-entry-body.open { display: block; }
+    .purchase-log-table th:first-child { text-align: left; }
 
-    .purchase-entry-date {
-      margin-bottom: 16px;
-    }
-
-    .purchase-entry-date label {
-      font-family: var(--font-label);
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--ksa-orange);
-      display: block;
-      margin-bottom: 6px;
-    }
-
-    .purchase-entry-date input[type="date"] {
+    .purchase-log-table td {
+      padding: 9px 12px;
+      text-align: right;
+      border-bottom: 1px solid var(--ksa-border);
       font-family: var(--font-body);
-      font-size: 13px;
-      padding: 8px 12px;
-      border: 1.5px solid var(--ksa-border);
-      border-radius: 6px;
-      background: var(--ksa-white);
       color: var(--ksa-text);
     }
 
-    .purchase-entry-grid {
+    .purchase-log-table td:first-child {
+      text-align: left;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .purchase-log-table tr:last-child td { border-bottom: none; }
+
+    .purchase-log-table tr:hover td { background: #FEFCFA; }
+
+    .purchase-log-table .total-col {
+      font-weight: 700;
+    }
+
+    .purchase-log-table .revenue-col {
+      font-weight: 700;
+      color: var(--ksa-green);
+    }
+
+    .purchase-log-empty {
+      padding: 24px;
+      text-align: center;
+      font-size: 14px;
+      opacity: 0.5;
+    }
+
+    /* Offer heading row with Log Purchase button */
+    .offer-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    /* Purchase entry modal fields */
+    .pe-modal-grid {
       display: flex;
       gap: 16px;
       flex-wrap: wrap;
       margin-bottom: 16px;
     }
 
-    .purchase-entry-field {
+    .pe-modal-field {
       flex: 1;
       min-width: 100px;
       max-width: 160px;
     }
 
-    .purchase-entry-field label {
+    .pe-modal-field label {
       font-family: var(--font-label);
       font-size: 12px;
       text-transform: uppercase;
@@ -1147,7 +1193,7 @@
       white-space: nowrap;
     }
 
-    .purchase-entry-field input[type="number"] {
+    .pe-modal-field input[type="number"] {
       width: 100%;
       font-family: var(--font-body);
       font-size: 14px;
@@ -1158,12 +1204,12 @@
       background: var(--ksa-white);
     }
 
-    .purchase-entry-field input[type="number"]:focus {
+    .pe-modal-field input[type="number"]:focus {
       outline: none;
       border-color: var(--ksa-pink);
     }
 
-    .purchase-entry-totals {
+    .pe-modal-totals {
       display: flex;
       gap: 24px;
       align-items: center;
@@ -1173,12 +1219,12 @@
       border-radius: 8px;
     }
 
-    .purchase-entry-total-item {
+    .pe-modal-total-item {
       display: flex;
       flex-direction: column;
     }
 
-    .purchase-entry-total-label {
+    .pe-modal-total-label {
       font-family: var(--font-label);
       font-size: 12px;
       text-transform: uppercase;
@@ -1186,17 +1232,12 @@
       color: var(--ksa-orange);
     }
 
-    .purchase-entry-total-value {
+    .pe-modal-total-value {
       font-family: var(--font-heading);
       font-weight: 700;
       font-size: 20px;
       color: var(--ksa-text);
       line-height: 1.2;
-    }
-
-    .purchase-entry-actions {
-      display: flex;
-      gap: 12px;
     }
 
     /* ============================================
@@ -1955,11 +1996,14 @@ function renderOfferView() {
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
-    <h3 class="section-heading">${escapeHtml(offerName)}</h3>
+    <div class="offer-heading-row">
+      <h3 class="section-heading" style="margin-bottom:0;">${escapeHtml(offerName)}</h3>
+      <button class="ksa-btn" onclick="openLogPurchaseModal('${escapeAttr(offerName)}')">+ Log Purchase</button>
+    </div>
 
     ${renderPurchaseStrip(configProducts, last7Days)}
 
-    ${renderPurchaseEntry(offerName, configProducts)}
+    ${renderPurchaseLog(offerName, configProducts, purchaseData)}
 
     ${renderDateBar()}
 
@@ -2911,75 +2955,146 @@ async function submitRenameProduct(offerName, oldName) {
 }
 
 // ============================================================
-// PURCHASE ENTRY
+// PURCHASE LOG (day-by-day table)
 // ============================================================
 
-function renderPurchaseEntry(offerName, configProducts) {
+function renderPurchaseLog(offerName, configProducts, purchaseData) {
   if (configProducts.length === 0) return '';
 
-  const productFields = configProducts.map(p => `
-    <div class="purchase-entry-field">
-      <label>${escapeHtml(p['Product Name'])}</label>
-      <input type="number" min="0" step="1" value="0"
-             id="pe-qty-${hashStr(p['Product Name'])}"
-             data-pe-product="${escapeAttr(p['Product Name'])}"
-             data-pe-price="${parseNum(p['Current Price'])}"
-             oninput="updatePurchaseTotals('${escapeAttr(offerName)}')">
-    </div>
-  `).join('');
+  const productNames = configProducts.map(p => p['Product Name']);
+
+  // Sort purchase data by date descending (most recent first)
+  const sorted = [...purchaseData].sort((a, b) => (b['Date'] || '').localeCompare(a['Date'] || ''));
+
+  // Limit to last 30 rows for display, with option to show all
+  const displayRows = sorted.slice(0, 30);
+  const hasMore = sorted.length > 30;
 
   return `
-    <div class="purchase-entry">
-      <div class="purchase-entry-header" onclick="togglePurchaseEntry()">
-        <div class="purchase-entry-title">Log Purchases</div>
-        <button class="purchase-entry-toggle" id="pe-toggle-btn">Show</button>
+    <div class="purchase-log">
+      <div class="purchase-log-header" onclick="togglePurchaseLog()">
+        <div class="purchase-log-title">
+          <span class="purchase-log-arrow" id="pl-arrow">&#9654;</span>
+          Purchase Log
+          <span style="font-family:var(--font-body);font-size:12px;font-weight:400;opacity:0.5;">${sorted.length} entries</span>
+        </div>
       </div>
-      <div class="purchase-entry-body" id="pe-body">
-        <div class="purchase-entry-date">
-          <label>Date</label>
-          <input type="date" id="pe-date" value="${dateStr(new Date())}">
-        </div>
+      <div class="purchase-log-body" id="pl-body">
+        ${sorted.length === 0 ? `
+          <div class="purchase-log-empty">No purchase data yet. Click "+ Log Purchase" to add entries.</div>
+        ` : `
+          <div style="overflow-x:auto;">
+            <table class="purchase-log-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  ${productNames.map(n => `<th>${escapeHtml(n)}</th>`).join('')}
+                  <th>Units</th>
+                  <th>Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${displayRows.map(row => {
+                  const totalUnits = parseNum(row['Total Units'] || '0');
+                  const totalRevenue = parseNum(row['Total Revenue'] || '0');
+                  // Format date nicely
+                  const dateVal = row['Date'] || '';
+                  const dateParts = dateVal.split('/');
+                  const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
 
-        <div class="purchase-entry-grid">
-          ${productFields}
-        </div>
-
-        <div class="purchase-entry-totals">
-          <div class="purchase-entry-total-item">
-            <span class="purchase-entry-total-label">Total Units</span>
-            <span class="purchase-entry-total-value" id="pe-total-units">0</span>
+                  return `<tr>
+                    <td>${displayDate}</td>
+                    ${productNames.map(n => {
+                      const qty = parseNum(row[n] || '0');
+                      return `<td>${qty > 0 ? qty : '<span style="opacity:0.2;">0</span>'}</td>`;
+                    }).join('')}
+                    <td class="total-col">${totalUnits}</td>
+                    <td class="revenue-col">${formatCurrency(totalRevenue)}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
-          <div class="purchase-entry-total-item">
-            <span class="purchase-entry-total-label">Total Revenue</span>
-            <span class="purchase-entry-total-value" id="pe-total-revenue">$0</span>
-          </div>
-        </div>
-
-        <div class="purchase-entry-actions">
-          <button class="ksa-btn" onclick="submitPurchases('${escapeAttr(offerName)}')">Save Purchases</button>
-        </div>
+          ${hasMore ? `<div style="padding:12px 24px;text-align:center;font-size:12px;opacity:0.5;">Showing 30 of ${sorted.length} entries</div>` : ''}
+        `}
       </div>
     </div>
   `;
 }
 
-function togglePurchaseEntry() {
-  const body = document.getElementById('pe-body');
-  const header = body.previousElementSibling;
-  const btn = document.getElementById('pe-toggle-btn');
+function togglePurchaseLog() {
+  const body = document.getElementById('pl-body');
+  const arrow = document.getElementById('pl-arrow');
   const isOpen = body.classList.contains('open');
   if (isOpen) {
     body.classList.remove('open');
-    header.classList.remove('open');
-    btn.textContent = 'Show';
+    arrow.classList.remove('open');
   } else {
     body.classList.add('open');
-    header.classList.add('open');
-    btn.textContent = 'Hide';
+    arrow.classList.add('open');
   }
 }
 
-function updatePurchaseTotals(offerName) {
+// ============================================================
+// LOG PURCHASE MODAL
+// ============================================================
+
+function openLogPurchaseModal(offerName) {
+  const slug = STATE.activeClient.slug;
+  const data = STATE.cache[slug];
+  if (!data) return;
+
+  const configProducts = (data.config || [])
+    .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
+    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+
+  if (configProducts.length === 0) {
+    showToast('No products configured for this offer');
+    return;
+  }
+
+  const productFields = configProducts.map(p => `
+    <div class="pe-modal-field">
+      <label>${escapeHtml(p['Product Name'])}</label>
+      <input type="number" min="0" step="1" value="0"
+             data-pe-product="${escapeAttr(p['Product Name'])}"
+             data-pe-price="${parseNum(p['Current Price'])}"
+             oninput="updatePurchaseModalTotals()">
+    </div>
+  `).join('');
+
+  const html = `
+    <div class="modal-title">Log Purchases — ${escapeHtml(offerName)}</div>
+
+    <div class="modal-label">Date</div>
+    <input class="modal-input" id="pe-date" type="date" value="${dateStr(new Date())}">
+
+    <div class="pe-modal-grid">
+      ${productFields}
+    </div>
+
+    <div class="pe-modal-totals">
+      <div class="pe-modal-total-item">
+        <span class="pe-modal-total-label">Total Units</span>
+        <span class="pe-modal-total-value" id="pe-total-units">0</span>
+      </div>
+      <div class="pe-modal-total-item">
+        <span class="pe-modal-total-label">Total Revenue</span>
+        <span class="pe-modal-total-value" id="pe-total-revenue">$0</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitPurchases('${escapeAttr(offerName)}')">Save</button>
+    </div>
+  `;
+
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function updatePurchaseModalTotals() {
   const inputs = document.querySelectorAll('[data-pe-product]');
   let totalUnits = 0;
   let totalRevenue = 0;
@@ -3028,7 +3143,7 @@ async function submitPurchases(offerName) {
   });
 
   if (result) {
-    // Refresh data and re-render
+    closeModal();
     await fetchClientData(STATE.activeClient.slug);
     renderOfferView();
     showToast('Purchases saved for ' + date);
