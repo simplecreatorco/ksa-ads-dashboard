@@ -1918,6 +1918,38 @@ function renderAccountOverview() {
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
 
+  // Build campaign status list from ALL active campaigns
+  const allCampaignGroups = groupByCampaign(data.dailyMeta);
+  const globalRecentDate = data.dailyMeta
+    .map(r => r.date).filter(Boolean).sort().slice(-1)[0] || '';
+
+  const campaignStatuses = [];
+  for (const [name, rows] of Object.entries(allCampaignGroups)) {
+    const spendYesterday = rows
+      .filter(r => r.date === globalRecentDate)
+      .reduce((s, r) => s + r.spend, 0);
+    if (!globalRecentDate || spendYesterday === 0) continue;
+    const status = calculateStatus(rows);
+    const agg = getCampaignAggregates(rows);
+    const isChecked = data.checkboxState.some(c => c['Campaign Name'] === name);
+    campaignStatuses.push({ name, rows, ...status, ...agg, isChecked });
+  }
+
+  const statusOrder = { scale: 0, duplicate: 0, turnoff: 1, watch: 2, hold: 3, new: 4 };
+  campaignStatuses.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
+
+  const actionCampaigns = campaignStatuses.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
+  const orangeCampaigns = campaignStatuses.filter(c => c.status === 'watch');
+  const newCampaigns    = campaignStatuses.filter(c => c.status === 'new');
+
+  let visibleCampaigns;
+  switch (STATE.campaignTab) {
+    case 'actions': visibleCampaigns = actionCampaigns; break;
+    case 'orange':  visibleCampaigns = orangeCampaigns; break;
+    case 'new':     visibleCampaigns = newCampaigns; break;
+    default:        visibleCampaigns = campaignStatuses;
+  }
+
   let html = `
     ${renderDateBar()}
 
@@ -1957,7 +1989,41 @@ function renderAccountOverview() {
       </div>
     </div>
 
-    <h3 class="section-heading">Offers</h3>
+    <div class="campaign-tabs">
+      <button class="campaign-tab ${STATE.campaignTab === 'actions' ? 'active' : ''}" onclick="setCampaignTab('actions')">
+        Today's Actions <span class="tab-count">${actionCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'orange' ? 'active' : ''}" onclick="setCampaignTab('orange')">
+        Orange Flags <span class="tab-count">${orangeCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'new' ? 'active' : ''}" onclick="setCampaignTab('new')">
+        New Campaigns <span class="tab-count">${newCampaigns.length}</span>
+      </button>
+      <button class="campaign-tab ${STATE.campaignTab === 'all' ? 'active' : ''}" onclick="setCampaignTab('all')">
+        All Campaigns <span class="tab-count">${campaignStatuses.length}</span>
+      </button>
+    </div>
+
+    <div class="campaign-table">
+      <div class="campaign-row campaign-row-header">
+        <span></span>
+        <span>Status</span>
+        <span>Campaign</span>
+        <span>ROAS</span>
+        <span>Spend</span>
+        <span>Revenue</span>
+        <span>Profit</span>
+        <span>CPM</span>
+        <span>Action</span>
+      </div>
+      ${visibleCampaigns.length === 0 ? `
+        <div style="padding:24px 16px; text-align:center; font-size:14px; opacity:0.5;">
+          No campaigns in this category.
+        </div>
+      ` : visibleCampaigns.map(c => renderCampaignRow(c)).join('')}
+    </div>
+
+    <h3 class="section-heading" style="margin-top:32px;">Offers</h3>
     <div class="offer-strip">
       ${renderOfferCards(data)}
     </div>
@@ -1967,6 +2033,14 @@ function renderAccountOverview() {
 
   // Draw chart after DOM update
   requestAnimationFrame(() => drawMainChart(rangeRows));
+
+  // Redraw expanded mini chart if one is open
+  if (STATE.expandedCampaign) {
+    const camp = campaignStatuses.find(c => c.name === STATE.expandedCampaign);
+    if (camp) {
+      requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
+    }
+  }
 }
 
 function renderDateBar() {
@@ -2049,57 +2123,11 @@ function renderOfferView() {
 
   const offerName = STATE.activeOffer;
 
-  // Performance chart and purchase metrics: still filtered to this offer's campaigns
+  // Offer performance chart: filtered to this offer's campaigns
   const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+  const offerRangeRows = filterByDateRange(offerMeta);
 
-  // Campaign STATUS TABS: use ALL campaigns in the client's Daily Meta.
-  // The "active" set = whatever campaigns were pulled on the most recent day
-  // (i.e. yesterday). This avoids brittle name-matching and shows exactly
-  // what's currently live — campaign 009 shows up even if its name uses "WTW"
-  // abbreviation instead of the full offer name.
-  const allCampaignGroups = groupByCampaign(data.dailyMeta);
-
-  // Find the globally most recent pull date across ALL campaigns
-  const globalRecentDate = data.dailyMeta
-    .map(r => r.date)
-    .filter(Boolean)
-    .sort()
-    .slice(-1)[0] || '';
-
-  // Build campaign list: only campaigns that had spend on the most recent pull date
-  const campaignStatuses = [];
-  for (const [name, rows] of Object.entries(allCampaignGroups)) {
-    const spendYesterday = rows
-      .filter(r => r.date === globalRecentDate)
-      .reduce((s, r) => s + r.spend, 0);
-
-    if (!globalRecentDate || spendYesterday === 0) continue; // Not active yesterday → skip
-
-    const status = calculateStatus(rows); // Uses full history for accurate ROAS
-    const agg = getCampaignAggregates(rows);
-    const isChecked = data.checkboxState.some(c => c['Campaign Name'] === name);
-    campaignStatuses.push({ name, rows, ...status, ...agg, isChecked });
-  }
-
-  // Sort: scale/turnoff first, then watch, then hold, then new
-  const statusOrder = { scale: 0, duplicate: 0, turnoff: 1, watch: 2, hold: 3, new: 4 };
-  campaignStatuses.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
-
-  // All campaigns in this list are confirmed active (had spend yesterday).
-  // Split into tabs by status.
-  const actionCampaigns = campaignStatuses.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
-  const orangeCampaigns = campaignStatuses.filter(c => c.status === 'watch');
-  const newCampaigns    = campaignStatuses.filter(c => c.status === 'new');
-
-  let visibleCampaigns;
-  switch (STATE.campaignTab) {
-    case 'actions': visibleCampaigns = actionCampaigns; break;
-    case 'orange':  visibleCampaigns = orangeCampaigns; break;
-    case 'new':     visibleCampaigns = newCampaigns; break;
-    default:        visibleCampaigns = campaignStatuses; // "All" = every active campaign
-  }
-
-  // Purchase summary strip — use selected date range
+  // Purchase data
   const purchaseData = data.purchases[offerName] || [];
   const configProducts = (data.config || [])
     .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
@@ -2108,15 +2136,10 @@ function renderOfferView() {
   const { start: rangeStart, end: rangeEnd } = getDateRange();
   const rangePurchases = purchaseData
     .filter(r => {
-      const d = r['Date'] || '';
-      // Handle M/D/YYYY dates by normalizing to YYYY-MM-DD for comparison
-      const normalized = normalizeDateStr(d);
+      const normalized = normalizeDateStr(r['Date'] || '');
       return normalized >= rangeStart && normalized <= rangeEnd;
     })
     .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
-
-  // Get offer-specific campaign data for chart
-  const offerRangeRows = filterByDateRange(offerMeta);
 
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
@@ -2144,54 +2167,12 @@ function renderOfferView() {
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
-
-    <div class="campaign-tabs">
-      <button class="campaign-tab ${STATE.campaignTab === 'actions' ? 'active' : ''}" onclick="setCampaignTab('actions')">
-        Today's Actions <span class="tab-count">${actionCampaigns.length}</span>
-      </button>
-      <button class="campaign-tab ${STATE.campaignTab === 'orange' ? 'active' : ''}" onclick="setCampaignTab('orange')">
-        Orange Flags <span class="tab-count">${orangeCampaigns.length}</span>
-      </button>
-      <button class="campaign-tab ${STATE.campaignTab === 'new' ? 'active' : ''}" onclick="setCampaignTab('new')">
-        New Campaigns <span class="tab-count">${newCampaigns.length}</span>
-      </button>
-      <button class="campaign-tab ${STATE.campaignTab === 'all' ? 'active' : ''}" onclick="setCampaignTab('all')">
-        All Campaigns <span class="tab-count">${campaignStatuses.length}</span>
-      </button>
-    </div>
-
-    <div class="campaign-table">
-      <div class="campaign-row campaign-row-header">
-        <span></span>
-        <span>Status</span>
-        <span>Campaign</span>
-        <span>ROAS</span>
-        <span>Spend</span>
-        <span>Revenue</span>
-        <span>Profit</span>
-        <span>CPM</span>
-        <span>Action</span>
-      </div>
-      ${visibleCampaigns.length === 0 ? `
-        <div style="padding:24px 16px; text-align:center; font-size:14px; opacity:0.5;">
-          No campaigns in this category.
-        </div>
-      ` : visibleCampaigns.map(c => renderCampaignRow(c)).join('')}
-    </div>
   `;
 
   document.getElementById('main-content').innerHTML = html;
 
   // Draw offer performance chart
   requestAnimationFrame(() => drawOfferChart(offerRangeRows));
-
-  // Draw any expanded mini charts (search all active campaigns, not just current tab)
-  if (STATE.expandedCampaign) {
-    const camp = campaignStatuses.find(c => c.name === STATE.expandedCampaign);
-    if (camp) {
-      requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
-    }
-  }
 }
 
 function renderPurchaseStrip(products, last7Days) {
@@ -2272,12 +2253,11 @@ function toggleCampaignExpand(name, event) {
   } else {
     STATE.expandedCampaign = name;
   }
-  renderOfferView();
+  renderAccountOverview();
 
   if (STATE.expandedCampaign) {
     const data = STATE.cache[STATE.activeClient.slug];
-    const offerMeta = getCampaignsForOffer(data.dailyMeta, STATE.activeOffer);
-    const groups = groupByCampaign(offerMeta);
+    const groups = groupByCampaign(data.dailyMeta);
     const rows = groups[name] || [];
     requestAnimationFrame(() => drawMiniChart(name, rows));
   }
@@ -2325,7 +2305,7 @@ function setChartMode(mode) {
 function setCampaignTab(tab) {
   STATE.campaignTab = tab;
   STATE.expandedCampaign = null;
-  renderOfferView();
+  renderAccountOverview();
 }
 
 async function refreshData() {
@@ -3441,59 +3421,56 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
 
   return `
     <div class="purchase-log">
-      <div class="purchase-log-header" onclick="togglePurchaseLog()">
+      <div class="purchase-log-header" style="cursor:default;">
         <div class="purchase-log-title">
-          <span class="purchase-log-arrow" id="pl-arrow">&#9654;</span>
           Purchase Log
           <span style="font-family:var(--font-body);font-size:12px;font-weight:400;opacity:0.5;">${sorted.length} entries</span>
         </div>
       </div>
-      <div class="purchase-log-body" id="pl-body">
-        ${sorted.length === 0 ? `
-          <div class="purchase-log-empty">No purchase data yet. Click "+ Log Purchase" to add entries.</div>
-        ` : `
-          <div style="overflow-x:auto;">
-            <table class="purchase-log-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  ${productNames.map(n => `<th>${escapeHtml(n)}</th>`).join('')}
-                  <th>Units</th>
-                  <th>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${displayRows.map(row => {
-                  const totalUnits = parseNum(row['Total Units'] || '0');
-                  const totalRevenue = parseNum(row['Total Revenue'] || '0');
-                  const dateVal = row['Date'] || '';
-                  const dateParts = dateVal.split('/');
-                  const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
+      ${sorted.length === 0 ? `
+        <div class="purchase-log-empty">No purchase data yet. Click "+ Log Purchase" to add entries.</div>
+      ` : `
+        <div style="overflow-x:auto;">
+          <table class="purchase-log-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                ${productNames.map(n => `<th>${escapeHtml(n)}</th>`).join('')}
+                <th>Units</th>
+                <th>Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayRows.map(row => {
+                const totalUnits = parseNum(row['Total Units'] || '0');
+                const totalRevenue = parseNum(row['Total Revenue'] || '0');
+                const dateVal = row['Date'] || '';
+                const dateParts = dateVal.split('/');
+                const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
 
-                  return `<tr>
-                    <td>${displayDate}</td>
-                    ${productNames.map(n => {
-                      const qty = parseNum(row[n] || '0');
-                      return `<td>${qty > 0 ? qty : '<span style="opacity:0.2;">0</span>'}</td>`;
-                    }).join('')}
-                    <td class="total-col">${totalUnits}</td>
-                    <td class="revenue-col">${formatCurrency(totalRevenue)}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
+                return `<tr>
+                  <td>${displayDate}</td>
+                  ${productNames.map(n => {
+                    const qty = parseNum(row[n] || '0');
+                    return `<td>${qty > 0 ? qty : '<span style="opacity:0.2;">0</span>'}</td>`;
+                  }).join('')}
+                  <td class="total-col">${totalUnits}</td>
+                  <td class="revenue-col">${formatCurrency(totalRevenue)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${totalPages > 1 ? `
+          <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 24px;border-top:1px solid var(--ksa-border);">
+            <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(-1)" ${page === 0 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>&#8592; Prev</button>
+            <span style="font-family:var(--font-body);font-size:13px;color:var(--ksa-text);">
+              Page ${page + 1} of ${totalPages}
+            </span>
+            <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(1)" ${page >= totalPages - 1 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>Next &#8594;</button>
           </div>
-          ${totalPages > 1 ? `
-            <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 24px;border-top:1px solid var(--ksa-border);">
-              <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(-1)" ${page === 0 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>&#8592; Prev</button>
-              <span style="font-family:var(--font-body);font-size:13px;color:var(--ksa-text);">
-                Page ${page + 1} of ${totalPages}
-              </span>
-              <button class="small-btn small-btn-outline" onclick="changePurchaseLogPage(1)" ${page >= totalPages - 1 ? 'disabled style="opacity:0.3;pointer-events:none;"' : ''}>Next &#8594;</button>
-            </div>
-          ` : ''}
-        `}
-      </div>
+        ` : ''}
+      `}
     </div>
   `;
 }
@@ -3514,15 +3491,6 @@ function togglePurchaseLog() {
 function changePurchaseLogPage(delta) {
   STATE.purchaseLogPage += delta;
   renderOfferView();
-  // Re-open the purchase log after re-render
-  requestAnimationFrame(() => {
-    const body = document.getElementById('pl-body');
-    const arrow = document.getElementById('pl-arrow');
-    if (body && arrow) {
-      body.classList.add('open');
-      arrow.classList.add('open');
-    }
-  });
 }
 
 // ============================================================
