@@ -1691,6 +1691,16 @@ function calculateStatus(campaignRows) {
     };
   }
 
+  // 1a. IG Followers campaigns — always Hold, never scale or turn off
+  if (/ig followers/i.test(campaignName)) {
+    return {
+      status: 'hold',
+      label: 'HOLD',
+      action: 'IG Followers — hold always',
+      actionClass: 'action-hold'
+    };
+  }
+
   // 1. New campaign (< 3 days data)
   if (totalDays < 3) {
     return {
@@ -1917,10 +1927,21 @@ function renderAccountOverview() {
   if (!data) return;
 
   const rangeRows = filterByDateRange(data.dailyMeta);
+  const { start: rangeStart, end: rangeEnd } = getDateRange();
 
-  // Aggregate
+  // Spend from Daily Meta (always correct source for ad spend)
   const totalSpend = rangeRows.reduce((s, r) => s + r.spend, 0);
-  const totalRevenue = rangeRows.reduce((s, r) => s + r.purchaseValue, 0);
+
+  // Revenue from Purchases tab (actual logged sales — source of truth)
+  const totalRevenue = Object.values(data.purchases).reduce((sum, offerRows) => {
+    return sum + offerRows
+      .filter(r => {
+        const d = normalizeDateStr(r['Date'] || '');
+        return d >= rangeStart && d <= rangeEnd;
+      })
+      .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+  }, 0);
+
   const overallROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
   const totalProfit = totalRevenue - totalSpend;
 
@@ -2040,8 +2061,17 @@ function renderAccountOverview() {
 
   document.getElementById('main-content').innerHTML = html;
 
+  // Build purchases-by-date map (all offers, for main chart revenue line)
+  const mainPurchasesByDate = {};
+  Object.values(data.purchases).forEach(offerRows => {
+    offerRows.forEach(r => {
+      const d = normalizeDateStr(r['Date'] || '');
+      if (d) mainPurchasesByDate[d] = (mainPurchasesByDate[d] || 0) + parseNum(r['Total Revenue'] || '0');
+    });
+  });
+
   // Draw chart after DOM update
-  requestAnimationFrame(() => drawMainChart(rangeRows));
+  requestAnimationFrame(() => drawMainChart(rangeRows, mainPurchasesByDate));
 
   // Redraw expanded mini chart if one is open
   if (STATE.expandedCampaign) {
@@ -2075,12 +2105,22 @@ function renderOfferCards(data) {
     return '<div style="font-size:14px;opacity:0.5;">No offers configured yet. Open Settings to add offers.</div>';
   }
 
+  const { start: cardRangeStart, end: cardRangeEnd } = getDateRange();
+
   return data.offers.map(offerName => {
-    // Get campaigns matching this offer
+    // Spend: Daily Meta filtered to this offer's campaigns
     const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
     const rangeRows = filterByDateRange(offerMeta);
     const spend = rangeRows.reduce((s, r) => s + r.spend, 0);
-    const revenue = rangeRows.reduce((s, r) => s + r.purchaseValue, 0);
+
+    // Revenue: Purchases tab — actual logged sales
+    const revenue = (data.purchases[offerName] || [])
+      .filter(r => {
+        const d = normalizeDateStr(r['Date'] || '');
+        return d >= cardRangeStart && d <= cardRangeEnd;
+      })
+      .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+
     const roas = spend > 0 ? revenue / spend : 0;
     const profit = revenue - spend;
 
@@ -2180,8 +2220,15 @@ function renderOfferView() {
 
   document.getElementById('main-content').innerHTML = html;
 
+  // Build purchases-by-date map for this offer's chart revenue line
+  const offerPurchasesByDate = {};
+  (data.purchases[offerName] || []).forEach(r => {
+    const d = normalizeDateStr(r['Date'] || '');
+    if (d) offerPurchasesByDate[d] = (offerPurchasesByDate[d] || 0) + parseNum(r['Total Revenue'] || '0');
+  });
+
   // Draw offer performance chart
-  requestAnimationFrame(() => drawOfferChart(offerRangeRows));
+  requestAnimationFrame(() => drawOfferChart(offerRangeRows, offerPurchasesByDate));
 }
 
 function renderPurchaseStrip(products, last7Days) {
@@ -2353,22 +2400,22 @@ const CHART_COLORS = {
   green: '#6BAF8A'
 };
 
-function drawMainChart(rangeRows) {
+function drawMainChart(rangeRows, purchasesByDate) {
   const canvas = document.getElementById('main-chart');
   if (!canvas) return;
 
-  // Aggregate by date
+  // Aggregate spend by date from Daily Meta
   const byDate = {};
   rangeRows.forEach(r => {
-    if (!byDate[r.date]) byDate[r.date] = { spend: 0, revenue: 0, roas: 0, count: 0, totalRoasWeight: 0 };
+    if (!byDate[r.date]) byDate[r.date] = { spend: 0 };
     byDate[r.date].spend += r.spend;
-    byDate[r.date].revenue += r.purchaseValue;
-    byDate[r.date].count++;
   });
 
+  // Revenue from Purchases tab (source of truth)
   const dates = Object.keys(byDate).sort();
   dates.forEach(d => {
     const day = byDate[d];
+    day.revenue = (purchasesByDate || {})[d] || 0;
     day.roas = day.spend > 0 ? day.revenue / day.spend : 0;
   });
 
@@ -2403,20 +2450,21 @@ function drawMainChart(rangeRows) {
   }
 }
 
-function drawOfferChart(rangeRows) {
+function drawOfferChart(rangeRows, purchasesByDate) {
   const canvas = document.getElementById('offer-chart');
   if (!canvas) return;
 
-  // Aggregate by date
+  // Aggregate spend by date from Daily Meta
   const byDate = {};
   rangeRows.forEach(r => {
-    if (!byDate[r.date]) byDate[r.date] = { spend: 0, revenue: 0 };
+    if (!byDate[r.date]) byDate[r.date] = { spend: 0 };
     byDate[r.date].spend += r.spend;
-    byDate[r.date].revenue += r.purchaseValue;
   });
 
+  // Revenue from Purchases tab (source of truth)
   const dates = Object.keys(byDate).sort();
   dates.forEach(d => {
+    byDate[d].revenue = (purchasesByDate || {})[d] || 0;
     byDate[d].roas = byDate[d].spend > 0 ? byDate[d].revenue / byDate[d].spend : 0;
   });
 
