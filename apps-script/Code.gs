@@ -100,7 +100,7 @@ function runDailyPull() {
       if (!accountId) continue;
 
       try {
-        pullAccountData_(metaSheet, accountId, config.META_TOKEN);
+        pullAccountData_(metaSheet, accountId, config.META_TOKEN, 'yesterday');
       } catch (e) {
         Logger.log('ERROR pulling account ' + accountId + ' for ' + slug + ': ' + e.message);
       }
@@ -115,28 +115,82 @@ function runDailyPull() {
 
 
 /**
- * Pull campaign-level insights from one Meta ad account for the last 30 days.
- * Uses dedup: only writes rows for (date, campaign) combos that don't already exist.
- * This means it safely backfills missing days and never duplicates existing data.
+ * ONE-TIME backfill: Pull the last 30 days of Meta data for all active clients.
+ * Run this manually once to seed historical data. Uses dedup so it's safe to
+ * run multiple times — existing rows are never duplicated.
+ * After running this once, the daily trigger (runDailyPull) handles day-by-day.
  */
-function pullAccountData_(metaSheet, accountId, token) {
+function backfill30Days() {
+  const ss = getSheet_();
+  const config = getConfig_();
+
+  var clientsSheet = ss.getSheetByName('Clients');
+  if (!clientsSheet) { Logger.log('ERROR: Clients tab not found'); return; }
+
+  var clientData = clientsSheet.getDataRange().getValues();
+  var headers = clientData[0];
+  var nameCol = headers.indexOf('Client Name');
+  var slugCol = headers.indexOf('Slug');
+  var accountCol = headers.indexOf('Meta Account ID(s)');
+  var statusCol = headers.indexOf('Status');
+
+  for (var i = 1; i < clientData.length; i++) {
+    var row = clientData[i];
+    var clientName = row[nameCol];
+    var slug = String(row[slugCol]).trim();
+    var accountIds = String(row[accountCol]).trim();
+    var status = String(row[statusCol]).trim();
+
+    if (status !== 'Active' || !slug || !accountIds) continue;
+
+    Logger.log('Backfilling 30 days for: ' + clientName + ' (' + slug + ')');
+
+    var ids = accountIds.split(',').map(function(id) { return id.trim(); });
+    var tabName = slug + ' - Daily Meta';
+    var metaSheet = ss.getSheetByName(tabName);
+    if (!metaSheet) { metaSheet = createDailyMetaTab_(ss, slug); }
+
+    for (var j = 0; j < ids.length; j++) {
+      if (!ids[j]) continue;
+      try {
+        pullAccountData_(metaSheet, ids[j], config.META_TOKEN, '30d');
+      } catch (e) {
+        Logger.log('ERROR backfilling ' + ids[j] + ' for ' + slug + ': ' + e.message);
+      }
+    }
+  }
+
+  Logger.log('30-day backfill complete');
+}
+
+
+/**
+ * Pull campaign-level insights from one Meta ad account.
+ * @param {string} dateMode — 'yesterday' for daily runs, or '30d' for backfill
+ * Uses dedup: only writes rows for (date, campaign) combos that don't already exist.
+ */
+function pullAccountData_(metaSheet, accountId, token, dateMode) {
   // Clean account ID — add 'act_' prefix if not present
   if (!accountId.startsWith('act_')) {
     accountId = 'act_' + accountId;
   }
 
-  // Calculate last 30 days
-  var today = new Date();
-  var thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  var since = Utilities.formatDate(thirtyDaysAgo, 'America/Chicago', 'yyyy-MM-dd');
-  var until = Utilities.formatDate(today, 'America/Chicago', 'yyyy-MM-dd');
+  // Build date portion of the URL
+  var datePart;
+  if (dateMode === '30d') {
+    var today = new Date();
+    var thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    var since = Utilities.formatDate(thirtyDaysAgo, 'America/Chicago', 'yyyy-MM-dd');
+    var until = Utilities.formatDate(today, 'America/Chicago', 'yyyy-MM-dd');
+    datePart = '&time_range={"since":"' + since + '","until":"' + until + '"}&time_increment=1';
+  } else {
+    datePart = '&date_preset=yesterday';
+  }
 
   const url = 'https://graph.facebook.com/v21.0/' + accountId + '/insights'
     + '?fields=campaign_name,spend,impressions,reach,clicks,actions,action_values,cpm,cpc,ctr,purchase_roas'
-    + '&time_range={"since":"' + since + '","until":"' + until + '"}'
-    + '&time_increment=1'
+    + datePart
     + '&level=campaign'
     + '&limit=500'
     + '&access_token=' + token;
@@ -285,10 +339,25 @@ function clearYesterdayCheckboxes() {
  * Verifies the shared secret before processing any action.
  */
 function doPost(e) {
-  // Verify secret
+  // Parse body first, then verify secret from body or URL params
   const config = getConfig_();
-  const secret = e.parameter.secret || '';
 
+  var payload;
+  try {
+    if (e.postData && e.postData.contents) {
+      payload = JSON.parse(e.postData.contents);
+    } else {
+      payload = e.parameter;
+    }
+  } catch (parseErr) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: 'Invalid JSON: ' + parseErr.message
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Check secret from body first, then URL params
+  var secret = (payload && payload.secret) || e.parameter.secret || '';
   if (secret !== config.WEBAPP_SECRET) {
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
@@ -297,13 +366,6 @@ function doPost(e) {
   }
 
   try {
-    var payload;
-    if (e.postData && e.postData.contents) {
-      payload = JSON.parse(e.postData.contents);
-    } else {
-      payload = e.parameter;
-    }
-
     var action = payload.action;
     var result;
 

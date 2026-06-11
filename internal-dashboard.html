@@ -1497,13 +1497,12 @@ function daysAgo(n) {
 
 async function postToWebApp(action, payload) {
   try {
+    // Use text/plain to avoid CORS preflight (Apps Script doesn't support OPTIONS).
+    // Pass the secret inside the body instead of a custom header.
     const res = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webapp-Secret': WEBAPP_SECRET
-      },
-      body: JSON.stringify({ action, ...payload })
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, secret: WEBAPP_SECRET, ...payload })
     });
     const result = await res.json();
     if (result.error) {
