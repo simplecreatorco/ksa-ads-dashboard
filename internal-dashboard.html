@@ -2855,8 +2855,8 @@ function openSettings() {
       <div class="settings-label">Slug</div>
       <input class="settings-input" id="settings-slug" value="${escapeAttr(client.slug)}" readonly>
 
-      <div class="settings-label">Meta Account IDs</div>
-      <input class="settings-input" id="settings-meta-ids" value="${escapeAttr(client.metaIds)}" placeholder="Comma-separated account IDs">
+      <div class="settings-label">Meta Account ID</div>
+      <input class="settings-input" id="settings-meta-ids" value="${escapeAttr(client.metaIds)}">
 
       <button class="ksa-btn" onclick="saveClientSettings()" style="margin-top:4px;">Save Client</button>
     </div>
@@ -3343,7 +3343,7 @@ function openAddClient() {
     <div class="modal-label">Slug</div>
     <input class="modal-input" id="modal-client-slug">
 
-    <div class="modal-label">Meta Account IDs</div>
+    <div class="modal-label">Meta Account ID</div>
     <input class="modal-input" id="modal-client-meta">
 
     <div class="modal-actions">
