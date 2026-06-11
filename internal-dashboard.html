@@ -1180,6 +1180,26 @@
       font-weight: 700;
     }
 
+    .purchase-log-table .action-col {
+      width: 52px;
+      white-space: nowrap;
+      text-align: right;
+      padding-right: 12px;
+    }
+    .pl-row-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--ksa-text);
+      opacity: 0.35;
+      transition: opacity 0.15s, color 0.15s;
+    }
+    .pl-row-btn:hover { opacity: 1; }
+    .pl-row-btn.delete:hover { color: #E05050; }
     .purchase-log-table .revenue-col {
       font-weight: 700;
       color: var(--ksa-green);
@@ -1795,8 +1815,8 @@ function calculateStatus(campaignRows) {
     };
   }
 
-  // 10. ROAS < 0.75 AND yesterday < 1.0
-  if (roas7 < TURN_OFF_THRESHOLD && roasYesterday < BREAK_EVEN) {
+  // 10. ROAS < 1.0 AND yesterday < 1.0 — both confirm, turn off
+  if (roas7 < BREAK_EVEN && roasYesterday < BREAK_EVEN) {
     return {
       status: 'turnoff',
       label: 'TURN OFF',
@@ -1805,7 +1825,7 @@ function calculateStatus(campaignRows) {
     };
   }
 
-  // 11. Everything else below 1.0
+  // 11. ROAS < 1.0 but yesterday >= 1.0 — possible day-over-day recovery, keep watching
   return {
     status: 'watch',
     label: 'WATCH',
@@ -3320,13 +3340,13 @@ function openAddClient() {
     <div class="modal-title">Add New Client</div>
 
     <div class="modal-label">Client Name</div>
-    <input class="modal-input" id="modal-client-name" placeholder="e.g. Hope Taylor Photography">
+    <input class="modal-input" id="modal-client-name">
 
     <div class="modal-label">Slug</div>
-    <input class="modal-input" id="modal-client-slug" placeholder="e.g. htp (lowercase, no spaces)">
+    <input class="modal-input" id="modal-client-slug">
 
     <div class="modal-label">Meta Account IDs</div>
-    <input class="modal-input" id="modal-client-meta" placeholder="Comma-separated (e.g. act_123456, act_789012)">
+    <input class="modal-input" id="modal-client-meta">
 
     <div class="modal-actions">
       <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
@@ -3485,6 +3505,7 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
                 ${productNames.map(n => `<th>${escapeHtml(n)}</th>`).join('')}
                 <th>Units</th>
                 <th>Revenue</th>
+                <th class="action-col"></th>
               </tr>
             </thead>
             <tbody>
@@ -3494,6 +3515,8 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
                 const dateVal = row['Date'] || '';
                 const dateParts = dateVal.split('/');
                 const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
+                const safeOffer = escapeAttr(offerName);
+                const safeDate = escapeAttr(dateVal);
 
                 return `<tr>
                   <td>${displayDate}</td>
@@ -3503,6 +3526,10 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
                   }).join('')}
                   <td class="total-col">${totalUnits}</td>
                   <td class="revenue-col">${formatCurrency(totalRevenue)}</td>
+                  <td class="action-col">
+                    <button class="pl-row-btn" title="Edit" onclick="openEditPurchase('${safeOffer}','${safeDate}')">✏</button>
+                    <button class="pl-row-btn delete" title="Delete" onclick="deletePurchaseRow('${safeOffer}','${safeDate}')">✕</button>
+                  </td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -3520,6 +3547,126 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
       `}
     </div>
   `;
+}
+
+function openEditPurchase(offerName, rawDate) {
+  const slug = STATE.activeClient.slug;
+  const data = STATE.cache[slug];
+  if (!data) return;
+
+  const configProducts = (data.config || [])
+    .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
+    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+
+  // Find the row by raw date value
+  const row = (data.purchases[offerName] || []).find(r => r['Date'] === rawDate);
+  if (!row) { showToast('Could not find that purchase entry'); return; }
+
+  const productFields = configProducts.map(p => {
+    const ptype = productType(p);
+    const pname = productDisplayName(p);
+    const labelText = pname ? `${ptype} — ${pname}` : ptype;
+    const currentQty = parseNum(row[ptype] || '0');
+    return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      <div style="font-size:13px;flex:1;font-family:var(--font-body);">${escapeHtml(labelText)}</div>
+      <input type="number" min="0" step="1" value="${currentQty}"
+             style="width:70px;padding:6px 8px;border:1px solid var(--ksa-border);border-radius:6px;font-family:var(--font-body);font-size:14px;text-align:center;"
+             data-pe-product="${escapeAttr(ptype)}"
+             data-pe-price="${parseNum(p['Current Price'])}"
+             oninput="updatePurchaseModalTotals()">
+    </div>`;
+  }).join('');
+
+  // Display a friendly date label
+  const normDate = normalizeDateStr(rawDate);
+  const displayDate = normDate ? normDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : rawDate;
+
+  const html = `
+    <div class="modal-title">Edit Purchase Entry</div>
+    <p style="font-family:var(--font-body);font-size:13px;margin:0 0 16px;opacity:0.5;">${escapeHtml(offerName)} &middot; ${displayDate}</p>
+    ${productFields}
+    <div style="display:flex;gap:24px;padding:10px 0 16px;border-top:1px solid var(--ksa-border);margin-top:6px;font-family:var(--font-body);font-size:13px;">
+      <div>Units: <strong id="pe-total-units">0</strong></div>
+      <div>Est. Revenue: <strong id="pe-total-revenue">$0</strong></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitEditPurchase('${escapeAttr(offerName)}','${escapeAttr(rawDate)}')">Save Changes</button>
+    </div>
+  `;
+
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+  updatePurchaseModalTotals();
+}
+
+async function submitEditPurchase(offerName, rawDate) {
+  const inputs = document.querySelectorAll('[data-pe-product]');
+  const quantities = {};
+  let totalUnits = 0;
+  let totalRevenue = 0;
+
+  inputs.forEach(input => {
+    const ptype = input.dataset.peProduct;
+    const price = parseFloat(input.dataset.pePrice) || 0;
+    const qty = parseInt(input.value) || 0;
+    if (qty > 0) quantities[ptype] = qty;
+    totalUnits += qty;
+    totalRevenue += qty * price;
+  });
+
+  // Send the normalized date so Apps Script can match it
+  const normalizedDate = normalizeDateStr(rawDate) || rawDate;
+
+  const result = await postToWebApp('save_purchases', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    date: normalizedDate,
+    quantities,
+    totalUnits,
+    totalRevenue
+  });
+
+  if (!result) return;
+  closeModal();
+  await fetchClientData(STATE.activeClient.slug);
+  renderOfferView();
+}
+
+async function deletePurchaseRow(offerName, rawDate) {
+  const normDate = normalizeDateStr(rawDate);
+  const displayDate = normDate ? normDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : rawDate;
+
+  // Simple inline confirm via modal
+  const html = `
+    <div class="modal-title">Delete Entry?</div>
+    <p style="font-family:var(--font-body);font-size:14px;margin:0 0 20px;">
+      Remove the purchase entry for <strong>${escapeHtml(displayDate)}</strong> from <strong>${escapeHtml(offerName)}</strong>?
+      This cannot be undone.
+    </p>
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" style="background:#E05050;" onclick="confirmDeletePurchase('${escapeAttr(offerName)}','${escapeAttr(rawDate)}')">Delete</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function confirmDeletePurchase(offerName, rawDate) {
+  closeModal();
+  const normalizedDate = normalizeDateStr(rawDate) || rawDate;
+
+  const result = await postToWebApp('delete_purchase', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    date: normalizedDate
+  });
+
+  if (!result) return;
+  await fetchClientData(STATE.activeClient.slug);
+  renderOfferView();
 }
 
 function togglePurchaseLog() {

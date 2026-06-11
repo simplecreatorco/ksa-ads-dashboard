@@ -401,6 +401,9 @@ function doPost(e) {
       case 'save_product_name':
         result = handleSaveProductName_(payload);
         break;
+      case 'delete_purchase':
+        result = handleDeletePurchase_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -705,14 +708,12 @@ function handleSavePurchases_(payload) {
     }
   }
 
-  // Check if a row for this date already exists
+  // Check if a row for this date already exists — normalize both sides for M/D/YYYY vs YYYY-MM-DD
   var data = sheet.getDataRange().getValues();
   var existingRow = -1;
+  var normalizedPayloadDate = normalizeDateForMatch_(date);
   for (var r = 1; r < data.length; r++) {
-    var rowDate = String(data[r][0]);
-    // Normalize date comparison — handle Date objects and strings
-    if (rowDate.length > 10) rowDate = rowDate.substring(0, 10);
-    if (rowDate === date) {
+    if (normalizeDateForMatch_(data[r][0]) === normalizedPayloadDate) {
       existingRow = r + 1; // 1-indexed sheet row
       break;
     }
@@ -893,6 +894,59 @@ function handleSaveProductName_(payload) {
   }
 
   return { success: false, error: 'Product not found: "' + payload.productType + '" in offer "' + payload.offerName + '"' };
+}
+
+
+/**
+ * Normalize a date value from a sheet cell to YYYY-MM-DD for comparison.
+ * Handles Date objects, M/D/YYYY strings, and YYYY-MM-DD strings.
+ */
+function normalizeDateForMatch_(d) {
+  if (!d && d !== 0) return '';
+  if (d instanceof Date) {
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  var s = String(d).trim();
+  // M/D/YYYY or MM/DD/YYYY
+  var slashParts = s.split('/');
+  if (slashParts.length === 3) {
+    var mo = slashParts[0].padStart(2, '0');
+    var dy = slashParts[1].padStart(2, '0');
+    var yr = slashParts[2].length === 4 ? slashParts[2] : ('20' + slashParts[2]);
+    return yr + '-' + mo + '-' + dy;
+  }
+  // YYYY-MM-DD or fallback — take first 10 chars
+  return s.substring(0, 10);
+}
+
+
+/**
+ * delete_purchase — Delete a single date row from a Purchases tab
+ * Payload: { clientSlug, offerName, date }  (date in YYYY-MM-DD)
+ */
+function handleDeletePurchase_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var offerName = payload.offerName;
+  var date = payload.date;
+  if (!offerName || !date) return { success: false, error: 'offerName and date required' };
+
+  var tabName = slug + ' - ' + offerName + ' Purchases';
+  var sheet = ss.getSheetByName(tabName);
+  if (!sheet) return { success: false, error: 'Purchases tab not found: ' + tabName };
+
+  var normalizedTarget = normalizeDateForMatch_(date);
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeDateForMatch_(data[i][0]) === normalizedTarget) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Row not found for date: ' + date };
 }
 
 
