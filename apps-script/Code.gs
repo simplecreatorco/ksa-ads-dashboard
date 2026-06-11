@@ -286,6 +286,15 @@ function doPost(e) {
       case 'setup_new_offer':
         result = handleSetupNewOffer_(payload);
         break;
+      case 'save_purchases':
+        result = handleSavePurchases_(payload);
+        break;
+      case 'rename_offer':
+        result = handleRenameOffer_(payload);
+        break;
+      case 'rename_product':
+        result = handleRenameProduct_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -543,6 +552,174 @@ function handleSetupNewOffer_(payload) {
   }
 
   return { success: true, message: 'Offer created: ' + payload.offerName + ' with ' + products.length + ' products' };
+}
+
+
+/**
+ * save_purchases — Write or update a day's purchase quantities in the Purchases tab
+ * Payload: { clientSlug, offerName, date, quantities: { "Product Name": number, ... }, totalUnits, totalRevenue }
+ */
+function handleSavePurchases_(payload) {
+  const ss = getSheet_();
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var offerName = payload.offerName;
+  if (!offerName) return { success: false, error: 'No offerName provided' };
+
+  var tabName = slug + ' - ' + offerName + ' Purchases';
+  var sheet = ss.getSheetByName(tabName);
+  if (!sheet) return { success: false, error: 'Purchases tab not found: ' + tabName };
+
+  var date = payload.date;
+  if (!date) return { success: false, error: 'No date provided' };
+
+  var quantities = payload.quantities || {};
+
+  // Read headers to determine column order
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // Build the row based on header order
+  var rowData = [];
+  rowData.push(date); // Column A = Date
+  for (var c = 1; c < headers.length; c++) {
+    var header = headers[c];
+    if (header === 'Total Units') {
+      rowData.push(Number(payload.totalUnits) || 0);
+    } else if (header === 'Total Revenue') {
+      rowData.push(Number(payload.totalRevenue) || 0);
+    } else {
+      // Product column — look up in quantities
+      rowData.push(Number(quantities[header]) || 0);
+    }
+  }
+
+  // Check if a row for this date already exists
+  var data = sheet.getDataRange().getValues();
+  var existingRow = -1;
+  for (var r = 1; r < data.length; r++) {
+    var rowDate = String(data[r][0]);
+    // Normalize date comparison — handle Date objects and strings
+    if (rowDate.length > 10) rowDate = rowDate.substring(0, 10);
+    if (rowDate === date) {
+      existingRow = r + 1; // 1-indexed sheet row
+      break;
+    }
+  }
+
+  if (existingRow > 0) {
+    // UPDATE existing row
+    sheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
+    return { success: true, message: 'Updated purchases for ' + date };
+  } else {
+    // APPEND new row
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, rowData.length).setValues([rowData]);
+    return { success: true, message: 'Added purchases for ' + date };
+  }
+}
+
+
+/**
+ * rename_offer — Rename an offer across Config, Price History, and Purchases tab
+ * Payload: { clientSlug, oldOfferName, newOfferName }
+ */
+function handleRenameOffer_(payload) {
+  const ss = getSheet_();
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var oldName = payload.oldOfferName;
+  var newName = payload.newOfferName;
+  if (!oldName || !newName) return { success: false, error: 'Both oldOfferName and newOfferName are required' };
+  if (oldName === newName) return { success: true, message: 'Names are the same, nothing to rename' };
+
+  // 1. Rename in Config tab
+  var configTabName = slug + ' - Config';
+  var configSheet = ss.getSheetByName(configTabName);
+  if (configSheet) {
+    var configData = configSheet.getDataRange().getValues();
+    for (var i = 1; i < configData.length; i++) {
+      if (configData[i][0] === oldName) {
+        configSheet.getRange(i + 1, 1).setValue(newName);
+      }
+    }
+  }
+
+  // 2. Rename in Price History tab
+  var priceSheet = ss.getSheetByName('Price History');
+  if (priceSheet) {
+    var priceData = priceSheet.getDataRange().getValues();
+    for (var j = 1; j < priceData.length; j++) {
+      if (String(priceData[j][0]) === slug && priceData[j][1] === oldName) {
+        priceSheet.getRange(j + 1, 2).setValue(newName);
+      }
+    }
+  }
+
+  // 3. Rename the Purchases tab itself
+  var oldTabName = slug + ' - ' + oldName + ' Purchases';
+  var newTabName = slug + ' - ' + newName + ' Purchases';
+  var purchasesTab = ss.getSheetByName(oldTabName);
+  if (purchasesTab) {
+    purchasesTab.setName(newTabName);
+  }
+
+  return { success: true, message: 'Offer renamed from "' + oldName + '" to "' + newName + '"' };
+}
+
+
+/**
+ * rename_product — Rename a product across Config, Price History, and Purchases tab header
+ * Payload: { clientSlug, offerName, oldProductName, newProductName }
+ */
+function handleRenameProduct_(payload) {
+  const ss = getSheet_();
+  const slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var offerName = payload.offerName;
+  var oldName = payload.oldProductName;
+  var newName = payload.newProductName;
+  if (!offerName || !oldName || !newName) return { success: false, error: 'offerName, oldProductName, and newProductName are all required' };
+  if (oldName === newName) return { success: true, message: 'Names are the same, nothing to rename' };
+
+  // 1. Update Config tab
+  var configTabName = slug + ' - Config';
+  var configSheet = ss.getSheetByName(configTabName);
+  if (configSheet) {
+    var configData = configSheet.getDataRange().getValues();
+    for (var i = 1; i < configData.length; i++) {
+      if (configData[i][0] === offerName && configData[i][1] === oldName) {
+        configSheet.getRange(i + 1, 2).setValue(newName);
+      }
+    }
+  }
+
+  // 2. Update Price History tab
+  var priceSheet = ss.getSheetByName('Price History');
+  if (priceSheet) {
+    var priceData = priceSheet.getDataRange().getValues();
+    for (var j = 1; j < priceData.length; j++) {
+      if (String(priceData[j][0]) === slug && priceData[j][1] === offerName && priceData[j][2] === oldName) {
+        priceSheet.getRange(j + 1, 3).setValue(newName);
+      }
+    }
+  }
+
+  // 3. Update Purchases tab header
+  var purchasesTabName = slug + ' - ' + offerName + ' Purchases';
+  var purchasesSheet = ss.getSheetByName(purchasesTabName);
+  if (purchasesSheet) {
+    var headers = purchasesSheet.getRange(1, 1, 1, purchasesSheet.getLastColumn()).getValues()[0];
+    for (var h = 0; h < headers.length; h++) {
+      if (headers[h] === oldName) {
+        purchasesSheet.getRange(1, h + 1).setValue(newName);
+        break;
+      }
+    }
+  }
+
+  return { success: true, message: 'Product renamed from "' + oldName + '" to "' + newName + '"' };
 }
 
 

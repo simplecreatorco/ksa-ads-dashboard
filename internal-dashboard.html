@@ -1043,6 +1043,163 @@
     }
 
     /* ============================================
+       EDIT ICONS (inline pencil buttons)
+       ============================================ */
+    .edit-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+      line-height: 1;
+    }
+    .edit-icon-btn:hover { opacity: 1; }
+
+    /* ============================================
+       PURCHASE ENTRY FORM
+       ============================================ */
+    .purchase-entry {
+      background: var(--ksa-white);
+      border-radius: 14px;
+      border: 1.5px solid var(--ksa-border);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .purchase-entry-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      margin-bottom: 0;
+    }
+
+    .purchase-entry-header.open { margin-bottom: 20px; }
+
+    .purchase-entry-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--ksa-text);
+    }
+
+    .purchase-entry-toggle {
+      font-family: var(--font-label);
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--ksa-pink);
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .purchase-entry-body { display: none; }
+    .purchase-entry-body.open { display: block; }
+
+    .purchase-entry-date {
+      margin-bottom: 16px;
+    }
+
+    .purchase-entry-date label {
+      font-family: var(--font-label);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--ksa-orange);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .purchase-entry-date input[type="date"] {
+      font-family: var(--font-body);
+      font-size: 13px;
+      padding: 8px 12px;
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 6px;
+      background: var(--ksa-white);
+      color: var(--ksa-text);
+    }
+
+    .purchase-entry-grid {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .purchase-entry-field {
+      flex: 1;
+      min-width: 100px;
+      max-width: 160px;
+    }
+
+    .purchase-entry-field label {
+      font-family: var(--font-label);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--ksa-pink);
+      display: block;
+      margin-bottom: 4px;
+      white-space: nowrap;
+    }
+
+    .purchase-entry-field input[type="number"] {
+      width: 100%;
+      font-family: var(--font-body);
+      font-size: 14px;
+      padding: 8px 10px;
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 6px;
+      color: var(--ksa-text);
+      background: var(--ksa-white);
+    }
+
+    .purchase-entry-field input[type="number"]:focus {
+      outline: none;
+      border-color: var(--ksa-pink);
+    }
+
+    .purchase-entry-totals {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: var(--ksa-bg);
+      border-radius: 8px;
+    }
+
+    .purchase-entry-total-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .purchase-entry-total-label {
+      font-family: var(--font-label);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--ksa-orange);
+    }
+
+    .purchase-entry-total-value {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--ksa-text);
+      line-height: 1.2;
+    }
+
+    .purchase-entry-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    /* ============================================
        RESPONSIVE
        ============================================ */
     @media (max-width: 900px) {
@@ -1802,6 +1959,8 @@ function renderOfferView() {
 
     ${renderPurchaseStrip(configProducts, last7Days)}
 
+    ${renderPurchaseEntry(offerName, configProducts)}
+
     ${renderDateBar()}
 
     <div class="campaign-tabs">
@@ -2274,7 +2433,10 @@ function openSettings() {
         return `
           <div class="offer-block">
             <div class="offer-block-header">
-              <div class="offer-block-name">${escapeHtml(offerName)}</div>
+              <div class="offer-block-name">
+                ${escapeHtml(offerName)}
+                <button class="edit-icon-btn" onclick="openRenameOffer('${escapeAttr(offerName)}')" title="Rename offer">&#9998;</button>
+              </div>
               <div class="offer-block-actions">
                 <button class="small-btn small-btn-outline" onclick="openAddProduct('${escapeAttr(offerName)}')">+ Product</button>
               </div>
@@ -2282,7 +2444,8 @@ function openSettings() {
             ${products.map((p, idx) => `
               <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}">
                 <span class="product-drag" title="Drag to reorder">&#9776;</span>
-                <span class="product-name">${escapeHtml(p['Product Name'])}</span>
+                <span class="product-name" data-product-name="${escapeAttr(p['Product Name'])}">${escapeHtml(p['Product Name'])}</span>
+                <button class="edit-icon-btn" onclick="event.stopPropagation(); openRenameProduct('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}')" title="Rename product">&#9998;</button>
                 <span class="product-price">${formatCurrency(parseNum(p['Current Price']))}</span>
                 <button class="product-price-btn" onclick="openChangePrice('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(p['Current Price'])}')">Change</button>
               </div>
@@ -2358,22 +2521,63 @@ async function saveProductOrder(offerName) {
   const rows = document.querySelectorAll(`.product-row[data-offer="${offerName}"]`);
   const products = [];
   rows.forEach((row, i) => {
+    const nameEl = row.querySelector('.product-name');
+    const productName = nameEl.dataset.productName || nameEl.textContent.trim();
     products.push({
-      name: row.querySelector('.product-name').textContent.trim(),
+      name: productName,
       position: i + 1,
       currentPrice: row.querySelector('.product-price').textContent.trim().replace('$', '').replace(',', ''),
       active: 'Yes'
     });
   });
 
+  // Save the new position order first
   await postToWebApp('save_config', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     products
   });
 
+  // Auto-rename products based on new position:
+  // Position 1 = keep existing name (main offer)
+  // Position 2 = "Bump"
+  // Position 3+ = "Upsell 1", "Upsell 2", etc.
+  const renamePromises = [];
+  let upsellCounter = 0;
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i];
+    let expectedName = null;
+
+    if (i === 0) {
+      // Position 1: keep existing name (main offer / tripwire)
+      continue;
+    } else if (i === 1) {
+      expectedName = 'Bump';
+    } else {
+      upsellCounter++;
+      expectedName = 'Upsell ' + upsellCounter;
+    }
+
+    if (expectedName && p.name !== expectedName) {
+      renamePromises.push(
+        postToWebApp('rename_product', {
+          clientSlug: STATE.activeClient.slug,
+          offerName,
+          oldProductName: p.name,
+          newProductName: expectedName
+        })
+      );
+    }
+  }
+
+  if (renamePromises.length > 0) {
+    await Promise.all(renamePromises);
+    showToast('Products reordered and renamed');
+  }
+
   // Refresh client data
   await fetchClientData(STATE.activeClient.slug);
+  openSettings(); // Refresh the settings panel to show updated names
 }
 
 async function saveClientSettings() {
@@ -2620,6 +2824,215 @@ async function submitAddClient() {
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// ============================================================
+// RENAME OFFER & PRODUCT
+// ============================================================
+
+function openRenameOffer(offerName) {
+  const html = `
+    <div class="modal-title">Rename Offer</div>
+
+    <div class="modal-label">Current Name</div>
+    <input class="modal-input" value="${escapeAttr(offerName)}" readonly style="background:#F8F6F4;color:#999;">
+
+    <div class="modal-label">New Name</div>
+    <input class="modal-input" id="modal-new-offer-name" type="text" placeholder="Enter new offer name" value="">
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitRenameOffer('${escapeAttr(offerName)}')">Save</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitRenameOffer(oldName) {
+  const newName = document.getElementById('modal-new-offer-name').value.trim();
+  if (!newName) { showToast('Enter a new offer name'); return; }
+  if (newName === oldName) { showToast('Name is the same'); return; }
+
+  const result = await postToWebApp('rename_offer', {
+    clientSlug: STATE.activeClient.slug,
+    oldOfferName: oldName,
+    newOfferName: newName
+  });
+
+  if (result) {
+    closeModal();
+    await fetchClientData(STATE.activeClient.slug);
+    // If we were viewing this offer, update the active offer name
+    if (STATE.activeOffer === oldName) {
+      STATE.activeOffer = newName;
+    }
+    openSettings();
+  }
+}
+
+function openRenameProduct(offerName, productName) {
+  const html = `
+    <div class="modal-title">Rename Product</div>
+    <p style="font-size:14px;margin-bottom:16px;">In ${escapeHtml(offerName)}</p>
+
+    <div class="modal-label">Current Name</div>
+    <input class="modal-input" value="${escapeAttr(productName)}" readonly style="background:#F8F6F4;color:#999;">
+
+    <div class="modal-label">New Name</div>
+    <input class="modal-input" id="modal-new-product-name" type="text" placeholder="Enter new product name" value="">
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitRenameProduct('${escapeAttr(offerName)}', '${escapeAttr(productName)}')">Save</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitRenameProduct(offerName, oldName) {
+  const newName = document.getElementById('modal-new-product-name').value.trim();
+  if (!newName) { showToast('Enter a new product name'); return; }
+  if (newName === oldName) { showToast('Name is the same'); return; }
+
+  const result = await postToWebApp('rename_product', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    oldProductName: oldName,
+    newProductName: newName
+  });
+
+  if (result) {
+    closeModal();
+    await fetchClientData(STATE.activeClient.slug);
+    openSettings();
+  }
+}
+
+// ============================================================
+// PURCHASE ENTRY
+// ============================================================
+
+function renderPurchaseEntry(offerName, configProducts) {
+  if (configProducts.length === 0) return '';
+
+  const productFields = configProducts.map(p => `
+    <div class="purchase-entry-field">
+      <label>${escapeHtml(p['Product Name'])}</label>
+      <input type="number" min="0" step="1" value="0"
+             id="pe-qty-${hashStr(p['Product Name'])}"
+             data-pe-product="${escapeAttr(p['Product Name'])}"
+             data-pe-price="${parseNum(p['Current Price'])}"
+             oninput="updatePurchaseTotals('${escapeAttr(offerName)}')">
+    </div>
+  `).join('');
+
+  return `
+    <div class="purchase-entry">
+      <div class="purchase-entry-header" onclick="togglePurchaseEntry()">
+        <div class="purchase-entry-title">Log Purchases</div>
+        <button class="purchase-entry-toggle" id="pe-toggle-btn">Show</button>
+      </div>
+      <div class="purchase-entry-body" id="pe-body">
+        <div class="purchase-entry-date">
+          <label>Date</label>
+          <input type="date" id="pe-date" value="${dateStr(new Date())}">
+        </div>
+
+        <div class="purchase-entry-grid">
+          ${productFields}
+        </div>
+
+        <div class="purchase-entry-totals">
+          <div class="purchase-entry-total-item">
+            <span class="purchase-entry-total-label">Total Units</span>
+            <span class="purchase-entry-total-value" id="pe-total-units">0</span>
+          </div>
+          <div class="purchase-entry-total-item">
+            <span class="purchase-entry-total-label">Total Revenue</span>
+            <span class="purchase-entry-total-value" id="pe-total-revenue">$0</span>
+          </div>
+        </div>
+
+        <div class="purchase-entry-actions">
+          <button class="ksa-btn" onclick="submitPurchases('${escapeAttr(offerName)}')">Save Purchases</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function togglePurchaseEntry() {
+  const body = document.getElementById('pe-body');
+  const header = body.previousElementSibling;
+  const btn = document.getElementById('pe-toggle-btn');
+  const isOpen = body.classList.contains('open');
+  if (isOpen) {
+    body.classList.remove('open');
+    header.classList.remove('open');
+    btn.textContent = 'Show';
+  } else {
+    body.classList.add('open');
+    header.classList.add('open');
+    btn.textContent = 'Hide';
+  }
+}
+
+function updatePurchaseTotals(offerName) {
+  const inputs = document.querySelectorAll('[data-pe-product]');
+  let totalUnits = 0;
+  let totalRevenue = 0;
+
+  inputs.forEach(input => {
+    const qty = parseInt(input.value) || 0;
+    const price = parseFloat(input.dataset.pePrice) || 0;
+    totalUnits += qty;
+    totalRevenue += qty * price;
+  });
+
+  const unitsEl = document.getElementById('pe-total-units');
+  const revenueEl = document.getElementById('pe-total-revenue');
+  if (unitsEl) unitsEl.textContent = totalUnits;
+  if (revenueEl) revenueEl.textContent = formatCurrency(totalRevenue);
+}
+
+async function submitPurchases(offerName) {
+  if (!STATE.activeClient) return;
+
+  const dateInput = document.getElementById('pe-date');
+  const date = dateInput ? dateInput.value : dateStr(new Date());
+  if (!date) { showToast('Please select a date'); return; }
+
+  const inputs = document.querySelectorAll('[data-pe-product]');
+  const quantities = {};
+  let totalUnits = 0;
+  let totalRevenue = 0;
+
+  inputs.forEach(input => {
+    const productName = input.dataset.peProduct;
+    const qty = parseInt(input.value) || 0;
+    const price = parseFloat(input.dataset.pePrice) || 0;
+    quantities[productName] = qty;
+    totalUnits += qty;
+    totalRevenue += qty * price;
+  });
+
+  const result = await postToWebApp('save_purchases', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    date,
+    quantities,
+    totalUnits,
+    totalRevenue
+  });
+
+  if (result) {
+    // Refresh data and re-render
+    await fetchClientData(STATE.activeClient.slug);
+    renderOfferView();
+    showToast('Purchases saved for ' + date);
+  }
 }
 
 // ============================================================
