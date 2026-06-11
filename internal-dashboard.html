@@ -551,18 +551,31 @@
       border-radius: 14px;
       border: 1.5px solid var(--ksa-border);
       padding: 16px 20px;
-      min-width: 140px;
+      min-width: 130px;
+      flex-shrink: 0;
       text-align: center;
     }
 
     .purchase-cell-name {
       font-family: var(--font-label);
-      font-size: 14px;
+      font-size: 13px;
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 1.5px;
       color: var(--ksa-pink);
+      margin-bottom: 2px;
+      white-space: nowrap;
+    }
+
+    .purchase-cell-subname {
+      font-family: var(--font-body);
+      font-size: 11px;
+      color: var(--ksa-text);
+      opacity: 0.5;
       margin-bottom: 6px;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
     }
 
     .purchase-cell-units {
@@ -1223,15 +1236,15 @@
     /* Purchase entry modal fields */
     .pe-modal-grid {
       display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 8px;
       margin-bottom: 16px;
     }
 
     .pe-modal-field {
-      flex: 1;
-      min-width: 100px;
-      max-width: 160px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
     .pe-modal-field label {
@@ -1240,13 +1253,13 @@
       text-transform: uppercase;
       letter-spacing: 1.5px;
       color: var(--ksa-pink);
-      display: block;
-      margin-bottom: 4px;
-      white-space: nowrap;
+      flex: 1;
+      line-height: 1.3;
     }
 
     .pe-modal-field input[type="number"] {
-      width: 100%;
+      width: 72px;
+      flex-shrink: 0;
       font-family: var(--font-body);
       font-size: 14px;
       padding: 8px 10px;
@@ -1254,6 +1267,7 @@
       border-radius: 6px;
       color: var(--ksa-text);
       background: var(--ksa-white);
+      text-align: center;
     }
 
     .pe-modal-field input[type="number"]:focus {
@@ -2281,12 +2295,10 @@ function renderPurchaseStrip(products, last7Days) {
         const rate = totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) : '--';
         const isFirst = ptype === firstProductName;
         const pname = productDisplayName(p);
-        const displayName = pname
-          ? `${escapeHtml(ptype)} <span style="opacity:0.55;font-size:11px;">— ${escapeHtml(pname)}</span>`
-          : escapeHtml(ptype);
         return `
           <div class="purchase-cell">
-            <div class="purchase-cell-name">${displayName}</div>
+            <div class="purchase-cell-name">${escapeHtml(ptype)}</div>
+            ${pname ? `<div class="purchase-cell-subname">${escapeHtml(pname)}</div>` : '<div class="purchase-cell-subname" style="visibility:hidden;">—</div>'}
             <div class="purchase-cell-units">${units}</div>
             <div class="purchase-cell-rate">${isFirst ? 'Tripwire' : rate + '% conv.'}</div>
           </div>
