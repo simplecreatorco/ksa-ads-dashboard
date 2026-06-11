@@ -1497,7 +1497,7 @@ async function fetchClientData(slug) {
 
 function parseDailyMeta(rows) {
   return rows.map(r => ({
-    date: r['Date'] || '',
+    date: normalizeDateStr(r['Date'] || ''),
     campaign: r['Campaign Name'] || '',
     spend: parseNum(r['Amount Spent']),
     impressions: parseNum(r['Impressions']),
@@ -1549,13 +1549,17 @@ function normalizeDateStr(d) {
 function formatChartDate(dateStr) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
+  // Normalize first so M/D/YYYY also works
+  const normalized = normalizeDateStr(dateStr);
+  const parts = normalized.split('-');
   if (parts.length === 3) {
     const mo = parseInt(parts[1], 10) - 1;
     const day = parseInt(parts[2], 10);
-    return MONTHS[mo] + ' ' + day;
+    if (mo >= 0 && mo <= 11 && day >= 1) {
+      return MONTHS[mo] + ' ' + day;
+    }
   }
-  return dateStr;
+  return ''; // drop any unparseable label rather than showing garbage
 }
 
 // ============================================================
@@ -2443,16 +2447,19 @@ function drawMiniChart(campaignName, rows) {
   const dates = last14.map(r => r.date);
   const roasData = last14.map(r => r.spend > 0 ? r.purchaseValue / r.spend : 0);
 
-  drawLineChart(canvas, dates, [
-    { data: roasData, color: CHART_COLORS.pink, label: 'ROAS' }
-  ], {
+  const miniOpts = {
     ySuffix: 'x',
     refLines: [
       { value: BREAK_EVEN, color: CHART_COLORS.refLine, dash: [4, 3] },
       { value: SCALE_THRESHOLD, color: CHART_COLORS.scaleRef, dash: [4, 3] }
     ],
     mini: true
-  });
+  };
+  // Store a redraw function so the hover indicator can clear itself
+  canvas._redrawFn = () => drawLineChart(canvas, dates, [
+    { data: roasData, color: CHART_COLORS.pink, label: 'ROAS' }
+  ], miniOpts);
+  canvas._redrawFn();
 }
 
 function drawLineChart(canvas, labels, series, opts = {}) {
@@ -2618,10 +2625,9 @@ function drawLineChart(canvas, labels, series, opts = {}) {
     });
   }
 
-  // Tooltip interaction (skip for mini charts)
-  if (!isMini && labels.length > 0) {
-    // Remove old listeners by replacing the canvas event handler reference
-    canvas._chartTooltipData = { labels, series, padLeft, padRight, padTop, chartW, chartH, yMin, yMax, w, h, opts };
+  // Tooltip interaction (all charts, including mini)
+  if (labels.length > 0) {
+    canvas._chartTooltipData = { labels, series, padLeft, padRight, padTop, padBottom, chartW, chartH, yMin, yMax, w, h, opts, isMini };
 
     if (!canvas._tooltipBound) {
       canvas._tooltipBound = true;
@@ -2631,6 +2637,12 @@ function drawLineChart(canvas, labels, series, opts = {}) {
         if (!td) return;
         const rect = this.getBoundingClientRect();
         const mx = e.clientX - rect.left;
+
+        // Only respond when cursor is within the chart area
+        if (mx < td.padLeft || mx > td.padLeft + td.chartW) {
+          document.getElementById('chart-tooltip').classList.remove('show');
+          return;
+        }
 
         // Find nearest data point index
         const stepX = td.chartW / (td.labels.length - 1 || 1);
@@ -2668,10 +2680,51 @@ function drawLineChart(canvas, labels, series, opts = {}) {
 
         tooltip.style.left = left + 'px';
         tooltip.style.top = top + 'px';
+
+        // For mini charts: draw a subtle vertical hover line + highlight dot
+        if (td.isMini) {
+          const dpr = window.devicePixelRatio || 1;
+          const ctx2 = this.getContext('2d');
+          // Redraw is needed to clear previous hover line — trigger a redraw
+          if (this._lastHoverIdx !== idx) {
+            this._lastHoverIdx = idx;
+            // Re-invoke the stored draw function
+            if (this._redrawFn) this._redrawFn();
+            // Draw hover line on top
+            const hx = td.padLeft + stepX * idx;
+            ctx2.save();
+            ctx2.scale(dpr, dpr);
+            ctx2.beginPath();
+            ctx2.setLineDash([3, 3]);
+            ctx2.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx2.lineWidth = 1;
+            ctx2.moveTo(hx, td.padTop);
+            ctx2.lineTo(hx, td.padTop + td.chartH);
+            ctx2.stroke();
+            ctx2.setLineDash([]);
+            // Highlight dot
+            td.series.forEach(s => {
+              const vy = td.padTop + td.chartH - ((s.data[idx] - td.yMin) / (td.yMax - td.yMin)) * td.chartH;
+              ctx2.beginPath();
+              ctx2.arc(hx, vy, 4.5, 0, Math.PI * 2);
+              ctx2.fillStyle = '#fff';
+              ctx2.fill();
+              ctx2.beginPath();
+              ctx2.arc(hx, vy, 3, 0, Math.PI * 2);
+              ctx2.fillStyle = s.color;
+              ctx2.fill();
+            });
+            ctx2.restore();
+          }
+        }
       });
 
       canvas.addEventListener('mouseleave', function() {
         document.getElementById('chart-tooltip').classList.remove('show');
+        if (this._chartTooltipData && this._chartTooltipData.isMini) {
+          this._lastHoverIdx = null;
+          if (this._redrawFn) this._redrawFn();
+        }
       });
     }
   }
