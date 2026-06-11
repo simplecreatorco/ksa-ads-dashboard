@@ -1495,6 +1495,15 @@ async function fetchClientData(slug) {
   updateSyncTime();
 }
 
+// Config row helpers — handle both old schema (Product Name = role)
+// and new schema (Product Type = role, Product Name = descriptive name).
+function productType(c) {
+  return (c['Product Type'] !== undefined ? c['Product Type'] : c['Product Name']) || '';
+}
+function productDisplayName(c) {
+  return (c['Product Type'] !== undefined ? c['Product Name'] : c['Product Label']) || '';
+}
+
 function parseDailyMeta(rows) {
   return rows.map(r => ({
     date: normalizeDateStr(r['Date'] || ''),
@@ -2181,17 +2190,17 @@ function renderPurchaseStrip(products, last7Days) {
   }
 
   // Get the first product as tripwire reference for conversion rate
-  const firstProductName = products[0]['Product Name'];
+  const firstProductName = productType(products[0]);
 
   // Aggregate last 7 days
   const totals = {};
-  products.forEach(p => { totals[p['Product Name']] = 0; });
+  products.forEach(p => { totals[productType(p)] = 0; });
   let totalTripwire = 0;
 
   last7Days.forEach(row => {
     products.forEach(p => {
-      const val = parseNum(row[p['Product Name']] || '0');
-      totals[p['Product Name']] += val;
+      const val = parseNum(row[productType(p)] || '0');
+      totals[productType(p)] += val;
     });
   });
 
@@ -2200,13 +2209,14 @@ function renderPurchaseStrip(products, last7Days) {
   return `
     <div class="purchase-strip">
       ${products.map(p => {
-        const units = totals[p['Product Name']] || 0;
+        const ptype = productType(p);
+        const units = totals[ptype] || 0;
         const rate = totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) : '--';
-        const isFirst = p['Product Name'] === firstProductName;
-        const label = p['Product Label'] || '';
-        const displayName = label
-          ? `${escapeHtml(p['Product Name'])} <span style="opacity:0.55;font-size:11px;">— ${escapeHtml(label)}</span>`
-          : escapeHtml(p['Product Name']);
+        const isFirst = ptype === firstProductName;
+        const pname = productDisplayName(p);
+        const displayName = pname
+          ? `${escapeHtml(ptype)} <span style="opacity:0.55;font-size:11px;">— ${escapeHtml(pname)}</span>`
+          : escapeHtml(ptype);
         return `
           <div class="purchase-cell">
             <div class="purchase-cell-name">${displayName}</div>
@@ -2803,15 +2813,16 @@ function openSettings() {
               </div>
             </div>
             ${products.map((p, idx) => {
-              const label = p['Product Label'] || '';
-              const displayName = label ? `${escapeHtml(p['Product Name'])} <span style="opacity:0.5;font-weight:400;">— ${escapeHtml(label)}</span>` : escapeHtml(p['Product Name']);
+              const ptype = productType(p);
+              const pname = productDisplayName(p);
+              const displayName = pname ? `${escapeHtml(ptype)} <span style="opacity:0.5;font-weight:400;">— ${escapeHtml(pname)}</span>` : escapeHtml(ptype);
               return `
-              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}" data-product-label="${escapeAttr(label)}">
+              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}" data-product-label="${escapeAttr(pname)}">
                 <span class="product-drag" title="Drag to reorder">&#9776;</span>
-                <span class="product-name" data-product-name="${escapeAttr(p['Product Name'])}">${displayName}</span>
+                <span class="product-name" data-product-name="${escapeAttr(ptype)}">${displayName}</span>
                 <span class="product-price">${formatCurrency(parseNum(p['Current Price']))}</span>
-                <button class="product-price-btn" onclick="openChangePrice('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(p['Current Price'])}')">Change</button>
-                <button class="product-price-btn" onclick="openEditProductLabel('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(label)}')">Label</button>
+                <button class="product-price-btn" onclick="openChangePrice('${escapeAttr(offerName)}', '${escapeAttr(ptype)}', '${escapeAttr(p['Current Price'])}')">Change</button>
+                <button class="product-price-btn" onclick="openEditProductName('${escapeAttr(offerName)}', '${escapeAttr(ptype)}', '${escapeAttr(pname)}')">Name</button>
               </div>`;
             }).join('')}
           </div>
@@ -3017,45 +3028,33 @@ async function submitPriceChange(offerName, productName) {
   openSettings(); // Refresh settings panel
 }
 
-function openEditProductLabel(offerName, productName, currentLabel) {
+function openEditProductName(offerName, ptype, currentName) {
   const html = `
     <div class="modal-title">Edit Product Name</div>
-    <p style="font-size:14px;margin-bottom:16px;opacity:0.6;">${escapeHtml(productName)} · ${escapeHtml(offerName)}</p>
+    <p style="font-size:14px;margin-bottom:16px;opacity:0.6;">${escapeHtml(ptype)} · ${escapeHtml(offerName)}</p>
 
     <div class="modal-label">Product Name <span style="opacity:0.5;font-weight:400;">(shown next to the type label)</span></div>
-    <input class="modal-input" id="modal-product-label" value="${escapeAttr(currentLabel)}" placeholder="e.g. What to Wear Guide">
-    <p style="font-size:12px;color:var(--ksa-text-muted);margin-top:-8px;margin-bottom:16px;">Will display as <strong>${escapeHtml(productName)} — [your text here]</strong></p>
+    <input class="modal-input" id="modal-product-pname" value="${escapeAttr(currentName)}" placeholder="e.g. What to Wear Guide">
+    <p style="font-size:12px;opacity:0.5;margin-top:-8px;margin-bottom:16px;">Displays as <strong>${escapeHtml(ptype)} — [your text here]</strong></p>
 
     <div class="modal-actions">
       <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="ksa-btn" onclick="submitEditProductLabel('${escapeAttr(offerName)}', '${escapeAttr(productName)}')">Save</button>
+      <button class="ksa-btn" onclick="submitEditProductName('${escapeAttr(offerName)}', '${escapeAttr(ptype)}')">Save</button>
     </div>
   `;
   document.getElementById('modal-box').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('show');
 }
 
-async function submitEditProductLabel(offerName, productName) {
-  const label = (document.getElementById('modal-product-label').value || '').trim();
+async function submitEditProductName(offerName, ptype) {
+  const pname = (document.getElementById('modal-product-pname').value || '').trim();
 
-  // Read all products for this offer so we send a full products array
-  const data = STATE.cache[STATE.activeClient.slug];
-  const offerProducts = (data.config || [])
-    .filter(c => c['Offer Name'] === offerName)
-    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
-
-  const products = offerProducts.map(p => ({
-    name: p['Product Name'],
-    position: parseInt(p['Position']),
-    currentPrice: p['Current Price'],
-    active: p['Active'] || 'Yes',
-    label: p['Product Name'] === productName ? label : (p['Product Label'] || '')
-  }));
-
-  const result = await postToWebApp('save_config', {
+  // Safe: save_product_name only writes col 6 — no risk of touching other data
+  const result = await postToWebApp('save_product_name', {
     clientSlug: STATE.activeClient.slug,
     offerName,
-    products
+    productType: ptype,
+    productName: pname
   });
 
   if (!result) return;
@@ -3074,7 +3073,7 @@ function openAddOffer() {
     <div style="border-top:1px solid var(--ksa-border);padding-top:16px;margin-top:4px;">
       <div class="modal-label">Main Offer</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product type (e.g. One-Time Payment)" id="modal-main-name">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product type (e.g. One-Time Payment, Tripwire)" id="modal-main-name">
         <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" id="modal-main-price">
       </div>
       <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional (e.g. What to Wear Guide)" id="modal-main-label">
@@ -3229,11 +3228,11 @@ async function submitAddUpsell(offerName, upsellName) {
   const newPosition = existingProducts.length + 1;
 
   const products = existingProducts.map(p => ({
-    name: p['Product Name'],
+    name: productType(p),
     position: parseInt(p['Position']),
     currentPrice: p['Current Price'],
     active: p['Active'],
-    label: p['Product Label'] || ''
+    label: productDisplayName(p)
   }));
 
   products.push({
@@ -3403,7 +3402,7 @@ async function submitRenameProduct(offerName, oldName) {
 function renderPurchaseLog(offerName, configProducts, purchaseData) {
   if (configProducts.length === 0) return '';
 
-  const productNames = configProducts.map(p => p['Product Name']);
+  const productNames = configProducts.map(p => productType(p));
   const PAGE_SIZE = 15;
 
   // Sort purchase data by date descending (most recent first) using normalized dates
@@ -3511,15 +3510,20 @@ function openLogPurchaseModal(offerName) {
     return;
   }
 
-  const productFields = configProducts.map(p => `
+  const productFields = configProducts.map(p => {
+    const ptype = productType(p);
+    const pname = productDisplayName(p);
+    const labelText = pname ? `${escapeHtml(ptype)} — ${escapeHtml(pname)}` : escapeHtml(ptype);
+    return `
     <div class="pe-modal-field">
-      <label>${escapeHtml(p['Product Name'])}</label>
+      <label>${labelText}</label>
       <input type="number" min="0" step="1" value="0"
-             data-pe-product="${escapeAttr(p['Product Name'])}"
+             data-pe-product="${escapeAttr(ptype)}"
              data-pe-price="${parseNum(p['Current Price'])}"
              oninput="updatePurchaseModalTotals()">
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   const html = `
     <div class="modal-title">Log Purchases — ${escapeHtml(offerName)}</div>

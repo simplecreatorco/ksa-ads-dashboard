@@ -398,6 +398,9 @@ function doPost(e) {
       case 'rename_product':
         result = handleRenameProduct_(payload);
         break;
+      case 'save_product_name':
+        result = handleSaveProductName_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -865,6 +868,34 @@ function handleRenameProduct_(payload) {
 }
 
 
+/**
+ * save_product_name — Write ONLY the Product Name (col 6) for one product.
+ * Safe: touches no other columns, no risk of duplicating rows.
+ * Payload: { clientSlug, offerName, productType, productName }
+ *   productType — the role identifier in col B (e.g. "Bump", "Upsell 1")
+ *   productName — the descriptive name to store in col F (e.g. "Style Guide")
+ */
+function handleSaveProductName_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var configSheet = ss.getSheetByName(slug + ' - Config');
+  if (!configSheet) return { success: false, error: 'Config tab not found' };
+
+  var data = configSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === payload.offerName &&
+        String(data[i][1]).trim() === payload.productType) {
+      configSheet.getRange(i + 1, 6).setValue(payload.productName || '');
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Product not found: "' + payload.productType + '" in offer "' + payload.offerName + '"' };
+}
+
+
 // ============================================
 // TAB CREATION HELPERS
 // ============================================
@@ -897,7 +928,7 @@ function createConfigTab_(ss, slug) {
   if (existing) return existing;
 
   var sheet = ss.insertSheet(tabName);
-  var headers = ['Offer Name', 'Product Name', 'Position', 'Current Price', 'Active', 'Product Label'];
+  var headers = ['Offer Name', 'Product Type', 'Position', 'Current Price', 'Active', 'Product Name'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
 
