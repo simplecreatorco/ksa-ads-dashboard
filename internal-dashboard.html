@@ -1932,9 +1932,9 @@ function renderAccountOverview() {
         <div class="summary-card-value">${formatCurrency(totalRevenue)}</div>
         <div class="summary-card-sub">From purchase logs</div>
       </div>
-      <div class="summary-card ${overallROAS >= SCALE_THRESHOLD ? 'highlight' : ''}">
+      <div class="summary-card">
         <div class="summary-card-eyebrow">Overall ROAS</div>
-        <div class="summary-card-value">${overallROAS.toFixed(2)}x</div>
+        <div class="summary-card-value" style="color:${overallROAS >= SCALE_THRESHOLD ? 'var(--ksa-green)' : overallROAS >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${overallROAS.toFixed(2)}x</div>
         <div class="summary-card-sub">${overallROAS >= SCALE_THRESHOLD ? 'Above scale threshold' : overallROAS >= BREAK_EVEN ? 'Above break-even' : 'Below break-even'}</div>
       </div>
       <div class="summary-card">
@@ -2049,14 +2049,33 @@ function renderOfferView() {
 
   const offerName = STATE.activeOffer;
 
-  // Get matching campaigns
+  // Performance chart and purchase metrics: still filtered to this offer's campaigns
   const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
-  const groups = groupByCampaign(offerMeta);
 
-  // Calculate status for each campaign
+  // Campaign STATUS TABS: use ALL campaigns in the client's Daily Meta.
+  // The "active" set = whatever campaigns were pulled on the most recent day
+  // (i.e. yesterday). This avoids brittle name-matching and shows exactly
+  // what's currently live — campaign 009 shows up even if its name uses "WTW"
+  // abbreviation instead of the full offer name.
+  const allCampaignGroups = groupByCampaign(data.dailyMeta);
+
+  // Find the globally most recent pull date across ALL campaigns
+  const globalRecentDate = data.dailyMeta
+    .map(r => r.date)
+    .filter(Boolean)
+    .sort()
+    .slice(-1)[0] || '';
+
+  // Build campaign list: only campaigns that had spend on the most recent pull date
   const campaignStatuses = [];
-  for (const [name, rows] of Object.entries(groups)) {
-    const status = calculateStatus(rows);
+  for (const [name, rows] of Object.entries(allCampaignGroups)) {
+    const spendYesterday = rows
+      .filter(r => r.date === globalRecentDate)
+      .reduce((s, r) => s + r.spend, 0);
+
+    if (!globalRecentDate || spendYesterday === 0) continue; // Not active yesterday → skip
+
+    const status = calculateStatus(rows); // Uses full history for accurate ROAS
     const agg = getCampaignAggregates(rows);
     const isChecked = data.checkboxState.some(c => c['Campaign Name'] === name);
     campaignStatuses.push({ name, rows, ...status, ...agg, isChecked });
@@ -2066,21 +2085,18 @@ function renderOfferView() {
   const statusOrder = { scale: 0, duplicate: 0, turnoff: 1, watch: 2, hold: 3, new: 4 };
   campaignStatuses.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
 
-  // Campaigns with status 'off' (zero spend yesterday) are already turned off —
-  // exclude them from ALL tabs. Their historical spend/revenue still feeds the
-  // performance chart and summary cards above (those use raw metaRows, not this list).
-  const activeCampaigns = campaignStatuses.filter(c => c.status !== 'off');
-
-  const actionCampaigns = activeCampaigns.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
-  const orangeCampaigns = activeCampaigns.filter(c => c.status === 'watch');
-  const newCampaigns    = activeCampaigns.filter(c => c.status === 'new');
+  // All campaigns in this list are confirmed active (had spend yesterday).
+  // Split into tabs by status.
+  const actionCampaigns = campaignStatuses.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
+  const orangeCampaigns = campaignStatuses.filter(c => c.status === 'watch');
+  const newCampaigns    = campaignStatuses.filter(c => c.status === 'new');
 
   let visibleCampaigns;
   switch (STATE.campaignTab) {
     case 'actions': visibleCampaigns = actionCampaigns; break;
     case 'orange':  visibleCampaigns = orangeCampaigns; break;
     case 'new':     visibleCampaigns = newCampaigns; break;
-    default:        visibleCampaigns = activeCampaigns; // "All" = only currently running
+    default:        visibleCampaigns = campaignStatuses; // "All" = every active campaign
   }
 
   // Purchase summary strip — use selected date range
@@ -2171,7 +2187,7 @@ function renderOfferView() {
 
   // Draw any expanded mini charts (search all active campaigns, not just current tab)
   if (STATE.expandedCampaign) {
-    const camp = activeCampaigns.find(c => c.name === STATE.expandedCampaign);
+    const camp = campaignStatuses.find(c => c.name === STATE.expandedCampaign);
     if (camp) {
       requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
     }
