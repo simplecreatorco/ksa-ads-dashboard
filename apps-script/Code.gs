@@ -389,6 +389,9 @@ function doPost(e) {
       case 'save_purchases':
         result = handleSavePurchases_(payload);
         break;
+      case 'save_client':
+        result = handleSaveClient_(payload);
+        break;
       case 'rename_offer':
         result = handleRenameOffer_(payload);
         break;
@@ -716,6 +719,40 @@ function handleSavePurchases_(payload) {
     sheet.getRange(sheet.getLastRow() + 1, 1, 1, rowData.length).setValues([rowData]);
     return { success: true, message: 'Added purchases for ' + date };
   }
+}
+
+
+/**
+ * save_client — Update a client's name and Meta account IDs in the Clients tab
+ * Payload: { clientSlug, clientName, metaAccountIds }
+ */
+function handleSaveClient_(payload) {
+  const ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var clientsSheet = ss.getSheetByName('Clients');
+  if (!clientsSheet) return { success: false, error: 'Clients tab not found' };
+
+  var data = clientsSheet.getDataRange().getValues();
+  var headers = data[0];
+  var slugCol   = headers.indexOf('Slug');
+  var nameCol   = headers.indexOf('Client Name');
+  var metaCol   = headers.indexOf('Meta Account ID(s)');
+
+  if (slugCol === -1) return { success: false, error: 'Slug column not found in Clients tab' };
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][slugCol]).trim() === slug) {
+      if (nameCol >= 0 && payload.clientName)
+        clientsSheet.getRange(i + 1, nameCol + 1).setValue(payload.clientName);
+      if (metaCol >= 0)
+        clientsSheet.getRange(i + 1, metaCol + 1).setValue(payload.metaAccountIds || '');
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Client not found: ' + slug };
 }
 
 

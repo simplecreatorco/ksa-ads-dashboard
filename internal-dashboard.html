@@ -1566,11 +1566,13 @@ function formatChartDate(dateStr) {
 // APPS SCRIPT WEB APP LAYER
 // ============================================================
 
-async function postToWebApp(action, payload) {
+// silent=true suppresses the success toast so multi-step saves can show one combined toast
+async function postToWebApp(action, payload, silent = false) {
   try {
     // Use text/plain to avoid CORS preflight (Apps Script doesn't support OPTIONS).
-    // Pass the secret inside the body instead of a custom header.
-    const res = await fetch(WEBAPP_URL, {
+    // Send secret in both URL param (for older deployments) AND body (for current deployment).
+    const url = WEBAPP_URL + '?secret=' + encodeURIComponent(WEBAPP_SECRET);
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action, secret: WEBAPP_SECRET, ...payload })
@@ -1578,9 +1580,10 @@ async function postToWebApp(action, payload) {
     const result = await res.json();
     if (result.error) {
       showToast('Error: ' + result.error);
+      console.error('Apps Script error for action "' + action + '":', result.error);
       return null;
     }
-    showToast('Saved successfully');
+    if (!silent) showToast('Saved');
     return result;
   } catch (e) {
     console.error('Web app POST error:', e);
@@ -2882,12 +2885,14 @@ async function saveProductOrder(offerName) {
     });
   });
 
-  // Save the new position order first
-  await postToWebApp('save_config', {
+  // Save the new position order first (silent — show one toast at end)
+  const orderResult = await postToWebApp('save_config', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     products
-  });
+  }, true);
+
+  if (!orderResult) return; // error already shown
 
   // Auto-rename products based on new position:
   // Position 1 = keep existing name (main offer)
@@ -2900,8 +2905,7 @@ async function saveProductOrder(offerName) {
     let expectedName = null;
 
     if (i === 0) {
-      // Position 1: keep existing name (main offer / tripwire)
-      continue;
+      continue; // Position 1: keep existing name (main offer / tripwire)
     } else if (i === 1) {
       expectedName = 'Bump';
     } else {
@@ -2916,14 +2920,16 @@ async function saveProductOrder(offerName) {
           offerName,
           oldProductName: p.name,
           newProductName: expectedName
-        })
+        }, true) // silent
       );
     }
   }
 
   if (renamePromises.length > 0) {
     await Promise.all(renamePromises);
-    showToast('Products reordered and renamed');
+    showToast('Reordered and renamed');
+  } else {
+    showToast('Order saved');
   }
 
   // Refresh client data
@@ -2932,15 +2938,17 @@ async function saveProductOrder(offerName) {
 }
 
 async function saveClientSettings() {
-  const name = document.getElementById('settings-client-name').value;
-  const metaIds = document.getElementById('settings-meta-ids').value;
+  const name = document.getElementById('settings-client-name').value.trim();
+  const metaIds = document.getElementById('settings-meta-ids').value.trim();
+  if (!name) { showToast('Client name is required'); return; }
 
-  // Update via web app
-  await postToWebApp('save_config', {
+  const result = await postToWebApp('save_client', {
     clientSlug: STATE.activeClient.slug,
     clientName: name,
     metaAccountIds: metaIds
   });
+
+  if (!result) return; // error already shown by postToWebApp
 
   // Update local state
   STATE.activeClient.name = name;
@@ -3161,20 +3169,24 @@ async function submitAddUpsell(offerName, upsellName) {
     active: 'Yes'
   });
 
-  await postToWebApp('save_config', {
+  const r1 = await postToWebApp('save_config', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     products
-  });
+  }, true); // silent — don't toast yet
 
-  // Also add to price history
-  await postToWebApp('save_price_change', {
+  if (!r1) return; // error already shown
+
+  // Add to price history (shows the single "Saved" toast)
+  const r2 = await postToWebApp('save_price_change', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     productName: upsellName,
     newPrice: price,
     effectiveDate: dateStr(new Date())
   });
+
+  if (!r2) return;
 
   closeModal();
   await fetchClientData(STATE.activeClient.slug);
@@ -3523,7 +3535,7 @@ async function submitPurchases(offerName) {
     quantities,
     totalUnits,
     totalRevenue
-  });
+  }, true); // silent — custom toast below
 
   if (result) {
     closeModal();
