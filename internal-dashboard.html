@@ -3136,21 +3136,20 @@ function openAddOffer() {
     <div class="modal-title">Add Offer</div>
 
     <div class="modal-label">Offer Name</div>
-    <input class="modal-input" id="modal-offer-name" placeholder="e.g. What to Wear Tiny Offer">
+    <input class="modal-input" id="modal-offer-name">
 
     <div style="border-top:1px solid var(--ksa-border);padding-top:16px;margin-top:4px;">
       <div class="modal-label">Main Offer</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product type (e.g. One-Time Payment, Tripwire)" id="modal-main-name">
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product Name" id="modal-main-name">
         <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" id="modal-main-price">
       </div>
-      <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional (e.g. What to Wear Guide)" id="modal-main-label">
 
       <div class="modal-label">Bump</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product Name" id="modal-bump-label">
         <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" id="modal-bump-price">
       </div>
-      <input class="modal-input" style="margin-bottom:16px;" placeholder="Bump product name, optional" id="modal-bump-label">
 
       <div id="modal-upsells-list">
         <div class="modal-upsell-row" data-upsell-idx="1">
@@ -3158,10 +3157,10 @@ function openAddOffer() {
             <div class="modal-label" style="margin-bottom:6px;">Upsell 1</div>
             <button class="edit-icon-btn" onclick="removeUpsellField(this)" title="Remove upsell" style="font-size:16px;opacity:0.4;">&#10005;</button>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product Name" data-upsell-label>
             <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-upsell-price>
           </div>
-          <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional" data-upsell-label>
         </div>
       </div>
     </div>
@@ -3189,10 +3188,10 @@ function addUpsellField() {
       <div class="modal-label" style="margin-bottom:6px;">Upsell ${nextNum}</div>
       <button class="edit-icon-btn" onclick="removeUpsellField(this)" title="Remove upsell" style="font-size:16px;opacity:0.4;">&#10005;</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product Name" data-upsell-label>
       <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-upsell-price>
     </div>
-    <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional" data-upsell-label>
   `;
   container.appendChild(div);
 }
@@ -3218,25 +3217,24 @@ async function submitAddOffer() {
   if (!mainName) { showToast('Enter a main offer product name'); return; }
   if (isNaN(mainPrice)) { showToast('Enter a main offer price'); return; }
 
-  const mainLabel = (document.getElementById('modal-main-label').value || '').trim();
-
+  const bumpLabel = (document.getElementById('modal-bump-label').value || '').trim();
   const bumpPrice = parseFloat(document.getElementById('modal-bump-price').value);
   if (isNaN(bumpPrice)) { showToast('Enter a bump price'); return; }
 
-  const bumpLabel = (document.getElementById('modal-bump-label').value || '').trim();
-
-  // Build products array: main offer, bump, then upsells
+  // Build products array: main offer (Product Name = col B type), bump, then upsells
   const products = [
-    { name: mainName, position: 1, price: mainPrice, label: mainLabel },
+    { name: mainName, position: 1, price: mainPrice, label: '' },
     { name: 'Bump', position: 2, price: bumpPrice, label: bumpLabel }
   ];
 
-  const upsellPriceInputs = document.querySelectorAll('[data-upsell-price]');
-  const upsellLabelInputs = document.querySelectorAll('[data-upsell-label]');
-  upsellPriceInputs.forEach((input, i) => {
-    const price = parseFloat(input.value);
+  // Each upsell row has [data-upsell-label] then [data-upsell-price]
+  const upsellRows = document.querySelectorAll('.modal-upsell-row');
+  upsellRows.forEach((row, i) => {
+    const priceInput = row.querySelector('[data-upsell-price]');
+    const labelInput = row.querySelector('[data-upsell-label]');
+    const price = parseFloat(priceInput ? priceInput.value : '');
     if (!isNaN(price) && price > 0) {
-      const label = (upsellLabelInputs[i] ? upsellLabelInputs[i].value || '' : '').trim();
+      const label = (labelInput ? labelInput.value || '' : '').trim();
       products.push({ name: 'Upsell ' + (i + 1), position: 3 + i, price, label });
     }
   });
