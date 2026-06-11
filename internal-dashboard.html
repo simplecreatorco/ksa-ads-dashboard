@@ -688,6 +688,7 @@
     .status-turnoff    { background: var(--ksa-red-soft);   color: var(--ksa-red);   }
     .status-new        { background: var(--ksa-slate-soft); color: var(--ksa-slate); }
     .status-hold       { background: #F5F5F5;              color: #888888;          }
+    .status-off        { background: #EBEBEB;              color: #AAAAAA;          }
 
     .campaign-name-cell {
       font-family: var(--font-body);
@@ -716,6 +717,7 @@
     .action-turnoff   { color: var(--ksa-red);   }
     .action-new       { color: var(--ksa-slate); }
     .action-hold      { color: #888;             }
+    .action-off       { color: #AAA;             }
 
     /* Expanded row mini chart */
     .campaign-expand {
@@ -1043,6 +1045,37 @@
     }
 
     /* ============================================
+       CHART TOOLTIP
+       ============================================ */
+    .chart-tooltip {
+      position: absolute;
+      background: var(--ksa-text);
+      color: var(--ksa-white);
+      font-family: var(--font-body);
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 50;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      line-height: 1.6;
+    }
+
+    .chart-tooltip.show { opacity: 1; }
+
+    .chart-tooltip-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* ============================================
        EDIT ICONS (inline pencil buttons)
        ============================================ */
     .edit-icon-btn {
@@ -1315,6 +1348,11 @@
   <div id="modal-overlay" onclick="closeModal()">
     <div class="modal-box" onclick="event.stopPropagation()" id="modal-box"></div>
   </div>
+
+  <!-- ============================================
+       CHART TOOLTIP
+       ============================================ -->
+  <div class="chart-tooltip" id="chart-tooltip"></div>
 
   <!-- ============================================
        TOAST
@@ -1608,6 +1646,20 @@ function calculateStatus(campaignRows) {
   const roas7 = d7w.roas;
   const roasYesterday = yw.roas;
   const campaignName = sorted.length > 0 ? sorted[0].campaign : '';
+
+  // 0. Zero spend in the most recent data = already turned off
+  // Check last 2 days of data — if both show $0 spend, campaign is off
+  const recentDates = uniqueDates.slice(-2);
+  const recentRows = sorted.filter(r => recentDates.includes(r.date));
+  const recentSpend = recentRows.reduce((s, r) => s + r.spend, 0);
+  if (recentSpend === 0 && totalDays >= 2) {
+    return {
+      status: 'off',
+      label: 'OFF',
+      action: 'Already turned off',
+      actionClass: 'action-off'
+    };
+  }
 
   // 1. New campaign (< 3 days data)
   if (totalDays < 3) {
@@ -2520,6 +2572,64 @@ function drawLineChart(canvas, labels, series, opts = {}) {
       ctx.fillText(s.label, legendX + 8, legendY + 4);
       legendX += ctx.measureText(s.label).width + 30;
     });
+  }
+
+  // Tooltip interaction (skip for mini charts)
+  if (!isMini && labels.length > 0) {
+    // Remove old listeners by replacing the canvas event handler reference
+    canvas._chartTooltipData = { labels, series, padLeft, padRight, padTop, chartW, chartH, yMin, yMax, w, h, opts };
+
+    if (!canvas._tooltipBound) {
+      canvas._tooltipBound = true;
+
+      canvas.addEventListener('mousemove', function(e) {
+        const td = this._chartTooltipData;
+        if (!td) return;
+        const rect = this.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+
+        // Find nearest data point index
+        const stepX = td.chartW / (td.labels.length - 1 || 1);
+        const relX = mx - td.padLeft;
+        let idx = Math.round(relX / stepX);
+        idx = Math.max(0, Math.min(idx, td.labels.length - 1));
+
+        const tooltip = document.getElementById('chart-tooltip');
+        const dateLabel = td.labels[idx];
+        const shortDate = dateLabel.slice(5); // MM-DD
+
+        let html = '<div style="font-weight:700;margin-bottom:2px;">' + shortDate + '</div>';
+        td.series.forEach(s => {
+          const val = s.data[idx];
+          let formatted;
+          if (td.opts.yPrefix === '$') formatted = formatCurrency(val);
+          else if (td.opts.ySuffix === 'x') formatted = val.toFixed(2) + 'x';
+          else formatted = formatShort(val);
+          html += '<div><span class="chart-tooltip-dot" style="background:' + s.color + '"></span>' + s.label + ': ' + formatted + '</div>';
+        });
+
+        tooltip.innerHTML = html;
+        tooltip.classList.add('show');
+
+        // Position tooltip near cursor but within viewport
+        const dotX = td.padLeft + stepX * idx;
+        const tooltipRect = tooltip.getBoundingClientRect();
+        let left = rect.left + dotX + 12;
+        if (left + tooltipRect.width > window.innerWidth - 16) {
+          left = rect.left + dotX - tooltipRect.width - 12;
+        }
+        const dotY = td.padTop + td.chartH - ((td.series[0].data[idx] - td.yMin) / (td.yMax - td.yMin)) * td.chartH;
+        let top = rect.top + dotY - tooltipRect.height / 2;
+        top = Math.max(8, Math.min(top, window.innerHeight - tooltipRect.height - 8));
+
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+      });
+
+      canvas.addEventListener('mouseleave', function() {
+        document.getElementById('chart-tooltip').classList.remove('show');
+      });
+    }
   }
 }
 
