@@ -1666,12 +1666,14 @@ function calculateStatus(campaignRows) {
   const roasYesterday = yw.roas;
   const campaignName = sorted.length > 0 ? sorted[0].campaign : '';
 
-  // 0. Zero spend in the most recent data = already turned off
-  // Check last 2 days of data — if both show $0 spend, campaign is off
-  const recentDates = uniqueDates.slice(-2);
-  const recentRows = sorted.filter(r => recentDates.includes(r.date));
-  const recentSpend = recentRows.reduce((s, r) => s + r.spend, 0);
-  if (recentSpend === 0 && totalDays >= 2) {
+  // 0. Zero spend on the most recent day = campaign has already been turned off.
+  // "Yesterday" in the data is the last date we have a row for. If that day
+  // shows $0 spend the campaign is off — exclude it from all action tabs.
+  const mostRecentDate = uniqueDates[uniqueDates.length - 1];
+  const mostRecentSpend = sorted
+    .filter(r => r.date === mostRecentDate)
+    .reduce((s, r) => s + r.spend, 0);
+  if (mostRecentSpend === 0) {
     return {
       status: 'off',
       label: 'OFF',
@@ -2064,17 +2066,21 @@ function renderOfferView() {
   const statusOrder = { scale: 0, duplicate: 0, turnoff: 1, watch: 2, hold: 3, new: 4 };
   campaignStatuses.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
 
-  // Filter for tabs
-  const actionCampaigns = campaignStatuses.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
-  const orangeCampaigns = campaignStatuses.filter(c => c.status === 'watch');
-  const newCampaigns = campaignStatuses.filter(c => c.status === 'new');
+  // Campaigns with status 'off' (zero spend yesterday) are already turned off —
+  // exclude them from ALL tabs. Their historical spend/revenue still feeds the
+  // performance chart and summary cards above (those use raw metaRows, not this list).
+  const activeCampaigns = campaignStatuses.filter(c => c.status !== 'off');
+
+  const actionCampaigns = activeCampaigns.filter(c => c.status === 'scale' || c.status === 'duplicate' || c.status === 'turnoff');
+  const orangeCampaigns = activeCampaigns.filter(c => c.status === 'watch');
+  const newCampaigns    = activeCampaigns.filter(c => c.status === 'new');
 
   let visibleCampaigns;
   switch (STATE.campaignTab) {
     case 'actions': visibleCampaigns = actionCampaigns; break;
-    case 'orange': visibleCampaigns = orangeCampaigns; break;
-    case 'new': visibleCampaigns = newCampaigns; break;
-    default: visibleCampaigns = campaignStatuses;
+    case 'orange':  visibleCampaigns = orangeCampaigns; break;
+    case 'new':     visibleCampaigns = newCampaigns; break;
+    default:        visibleCampaigns = activeCampaigns; // "All" = only currently running
   }
 
   // Purchase summary strip — use selected date range
@@ -2163,9 +2169,9 @@ function renderOfferView() {
   // Draw offer performance chart
   requestAnimationFrame(() => drawOfferChart(offerRangeRows));
 
-  // Draw any expanded mini charts
+  // Draw any expanded mini charts (search all active campaigns, not just current tab)
   if (STATE.expandedCampaign) {
-    const camp = visibleCampaigns.find(c => c.name === STATE.expandedCampaign);
+    const camp = activeCampaigns.find(c => c.name === STATE.expandedCampaign);
     if (camp) {
       requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
     }
@@ -2686,34 +2692,34 @@ function drawLineChart(canvas, labels, series, opts = {}) {
 
         // For mini charts: draw a subtle vertical hover line + highlight dot
         if (td.isMini) {
-          const dpr = window.devicePixelRatio || 1;
           const ctx2 = this.getContext('2d');
-          // Redraw is needed to clear previous hover line — trigger a redraw
           if (this._lastHoverIdx !== idx) {
             this._lastHoverIdx = idx;
-            // Re-invoke the stored draw function
+            // Redraw the chart first to clear the previous hover indicator.
+            // _redrawFn resets canvas.width (clearing everything) and calls
+            // ctx.scale(dpr, dpr) internally — so after it returns the context
+            // is already at the correct DPR scale. Do NOT scale again here.
             if (this._redrawFn) this._redrawFn();
-            // Draw hover line on top
             const hx = td.padLeft + stepX * idx;
             ctx2.save();
-            ctx2.scale(dpr, dpr);
+            // NO ctx2.scale() — _redrawFn already applied dpr scaling
             ctx2.beginPath();
             ctx2.setLineDash([3, 3]);
-            ctx2.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx2.strokeStyle = 'rgba(0,0,0,0.18)';
             ctx2.lineWidth = 1;
             ctx2.moveTo(hx, td.padTop);
             ctx2.lineTo(hx, td.padTop + td.chartH);
             ctx2.stroke();
             ctx2.setLineDash([]);
-            // Highlight dot
+            // Highlight dot at each series point
             td.series.forEach(s => {
               const vy = td.padTop + td.chartH - ((s.data[idx] - td.yMin) / (td.yMax - td.yMin)) * td.chartH;
               ctx2.beginPath();
-              ctx2.arc(hx, vy, 4.5, 0, Math.PI * 2);
+              ctx2.arc(hx, vy, 5, 0, Math.PI * 2);
               ctx2.fillStyle = '#fff';
               ctx2.fill();
               ctx2.beginPath();
-              ctx2.arc(hx, vy, 3, 0, Math.PI * 2);
+              ctx2.arc(hx, vy, 3.5, 0, Math.PI * 2);
               ctx2.fillStyle = s.color;
               ctx2.fill();
             });
