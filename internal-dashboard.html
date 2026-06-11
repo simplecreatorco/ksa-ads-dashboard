@@ -174,6 +174,9 @@
     }
 
     .sidebar-client {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       padding: 10px 20px;
       font-family: var(--font-body);
       font-size: 14px;
@@ -192,6 +195,33 @@
       border-left-color: var(--ksa-pink);
       font-weight: 700;
     }
+
+    .sidebar-client-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ext-view-btn {
+      flex-shrink: 0;
+      font-family: var(--font-label);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border: 1.5px solid var(--ksa-pink);
+      color: var(--ksa-pink);
+      background: transparent;
+      border-radius: 4px;
+      text-decoration: none;
+      cursor: pointer;
+      opacity: 0.8;
+      transition: opacity 0.15s;
+      line-height: 1.4;
+    }
+
+    .ext-view-btn:hover { opacity: 1; }
 
     .sidebar-add {
       padding: 14px 20px;
@@ -1914,12 +1944,22 @@ function getCampaignsForOffer(dailyMeta, offerName) {
 
 function renderSidebar() {
   const container = document.getElementById('client-list');
-  container.innerHTML = STATE.clients.map(c => `
-    <div class="sidebar-client ${STATE.activeClient && STATE.activeClient.slug === c.slug ? 'active' : ''}"
-         onclick="selectClient('${c.slug}')">
-      ${c.name}
-    </div>
-  `).join('');
+  container.innerHTML = STATE.clients.map(c => {
+    const isActive = STATE.activeClient && STATE.activeClient.slug === c.slug;
+    const extBtn = isActive ? `
+      <a class="ext-view-btn"
+         href="https://simplecreatorco.github.io/ksa-ads-dashboard/external-dashboard.html?client=${encodeURIComponent(c.slug)}"
+         target="_blank"
+         onclick="event.stopPropagation()"
+         title="Open client external dashboard">Ext</a>
+    ` : '';
+    return `
+      <div class="sidebar-client ${isActive ? 'active' : ''}" onclick="selectClient('${c.slug}')">
+        <span class="sidebar-client-name">${c.name}</span>
+        ${extBtn}
+      </div>
+    `;
+  }).join('');
 }
 
 async function selectClient(slug) {
