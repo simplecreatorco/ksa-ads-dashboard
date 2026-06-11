@@ -12,6 +12,39 @@ Keep scope tight. These are data display dashboards, not full applications.
 
 ---
 
+## Internal → External Sync Rule
+
+When editing `internal-dashboard.html`, check whether the change affects any section that also exists in `external-dashboard.html`. If it does, **pause and ask Rebecca** before continuing:
+
+> "This change affects [section name], which also exists in the external dashboard. Should I apply it there too?"
+
+If she confirms, apply the equivalent change to `external-dashboard.html` and push both files.
+
+**Sections shared between internal and external (always check):**
+- CSS variables and brand styles (`:root`, body, base reset)
+- Topbar layout or style (not the settings button — that's internal-only)
+- Date range bar
+- Summary cards (layout, labels, or new metrics)
+- Performance chart (Spend & Revenue / ROAS toggle, chart logic, tooltips)
+- Offer cards (account overview strip)
+- Offer view structure (back button, section heading, date bar)
+- Purchase strip (unit counts, conversion rates)
+- Offer performance chart
+- Purchase log table (columns, layout, pagination — but NOT the edit/delete action column, which is internal-only)
+- `fetchSheet`, `fetchClientData`, `parseDailyMeta`, `parseNum`, `normalizeDateStr`, `formatChartDate`, `formatCurrency`, `formatShort`, `escapeHtml`, `escapeAttr` — any logic change to these affects both
+
+**Internal-only sections (no sync needed):**
+- Sidebar
+- Campaign table and tabs (Today's Actions / Orange Flags / New / All)
+- Campaign row checkboxes
+- Settings panel
+- All modals (Log Purchase, Change Price, Add Offer, Add Client, etc.)
+- Toast notifications
+- Edit/delete buttons on the purchase log action column
+- `postToWebApp`, `saveCheckbox`, and all write operations
+
+---
+
 ## Branding
 
 **Before writing any HTML or CSS, read the KSA branding skill:**
