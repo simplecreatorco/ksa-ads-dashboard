@@ -2222,9 +2222,13 @@ function renderPurchaseStrip(products, last7Days) {
         const units = totals[p['Product Name']] || 0;
         const rate = totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) : '--';
         const isFirst = p['Product Name'] === firstProductName;
+        const label = p['Product Label'] || '';
+        const displayName = label
+          ? `${escapeHtml(p['Product Name'])} <span style="opacity:0.55;font-size:11px;">— ${escapeHtml(label)}</span>`
+          : escapeHtml(p['Product Name']);
         return `
           <div class="purchase-cell">
-            <div class="purchase-cell-name">${escapeHtml(p['Product Name'])}</div>
+            <div class="purchase-cell-name">${displayName}</div>
             <div class="purchase-cell-units">${units}</div>
             <div class="purchase-cell-rate">${isFirst ? 'Tripwire' : rate + '% conv.'}</div>
           </div>
@@ -2818,14 +2822,18 @@ function openSettings() {
                 <button class="small-btn small-btn-outline" onclick="openAddUpsell('${escapeAttr(offerName)}')">+ Add Upsell</button>
               </div>
             </div>
-            ${products.map((p, idx) => `
-              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}">
+            ${products.map((p, idx) => {
+              const label = p['Product Label'] || '';
+              const displayName = label ? `${escapeHtml(p['Product Name'])} <span style="opacity:0.5;font-weight:400;">— ${escapeHtml(label)}</span>` : escapeHtml(p['Product Name']);
+              return `
+              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}" data-product-label="${escapeAttr(label)}">
                 <span class="product-drag" title="Drag to reorder">&#9776;</span>
-                <span class="product-name" data-product-name="${escapeAttr(p['Product Name'])}">${escapeHtml(p['Product Name'])}</span>
+                <span class="product-name" data-product-name="${escapeAttr(p['Product Name'])}">${displayName}</span>
                 <span class="product-price">${formatCurrency(parseNum(p['Current Price']))}</span>
                 <button class="product-price-btn" onclick="openChangePrice('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(p['Current Price'])}')">Change</button>
-              </div>
-            `).join('')}
+                <button class="product-price-btn" onclick="openEditProductLabel('${escapeAttr(offerName)}', '${escapeAttr(p['Product Name'])}', '${escapeAttr(label)}')">Label</button>
+              </div>`;
+            }).join('')}
           </div>
         `;
       }).join('')}
@@ -2903,7 +2911,8 @@ async function saveProductOrder(offerName) {
       name: productName,
       position: i + 1,
       currentPrice: row.querySelector('.product-price').textContent.trim().replace('$', '').replace(',', ''),
-      active: 'Yes'
+      active: 'Yes',
+      label: row.dataset.productLabel || ''
     });
   });
 
@@ -3028,6 +3037,53 @@ async function submitPriceChange(offerName, productName) {
   openSettings(); // Refresh settings panel
 }
 
+function openEditProductLabel(offerName, productName, currentLabel) {
+  const html = `
+    <div class="modal-title">Edit Product Name</div>
+    <p style="font-size:14px;margin-bottom:16px;opacity:0.6;">${escapeHtml(productName)} · ${escapeHtml(offerName)}</p>
+
+    <div class="modal-label">Product Name <span style="opacity:0.5;font-weight:400;">(shown next to the type label)</span></div>
+    <input class="modal-input" id="modal-product-label" value="${escapeAttr(currentLabel)}" placeholder="e.g. What to Wear Guide">
+    <p style="font-size:12px;color:var(--ksa-text-muted);margin-top:-8px;margin-bottom:16px;">Will display as <strong>${escapeHtml(productName)} — [your text here]</strong></p>
+
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="submitEditProductLabel('${escapeAttr(offerName)}', '${escapeAttr(productName)}')">Save</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function submitEditProductLabel(offerName, productName) {
+  const label = (document.getElementById('modal-product-label').value || '').trim();
+
+  // Read all products for this offer so we send a full products array
+  const data = STATE.cache[STATE.activeClient.slug];
+  const offerProducts = (data.config || [])
+    .filter(c => c['Offer Name'] === offerName)
+    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
+
+  const products = offerProducts.map(p => ({
+    name: p['Product Name'],
+    position: parseInt(p['Position']),
+    currentPrice: p['Current Price'],
+    active: p['Active'] || 'Yes',
+    label: p['Product Name'] === productName ? label : (p['Product Label'] || '')
+  }));
+
+  const result = await postToWebApp('save_config', {
+    clientSlug: STATE.activeClient.slug,
+    offerName,
+    products
+  });
+
+  if (!result) return;
+  closeModal();
+  await fetchClientData(STATE.activeClient.slug);
+  openSettings();
+}
+
 function openAddOffer() {
   const html = `
     <div class="modal-title">Add Offer</div>
@@ -3037,15 +3093,17 @@ function openAddOffer() {
 
     <div style="border-top:1px solid var(--ksa-border);padding-top:16px;margin-top:4px;">
       <div class="modal-label">Main Offer</div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product name (e.g. One-Time Payment)" id="modal-main-name">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product type (e.g. One-Time Payment)" id="modal-main-name">
         <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" id="modal-main-price">
       </div>
+      <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional (e.g. What to Wear Guide)" id="modal-main-label">
 
       <div class="modal-label">Bump</div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
         <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" id="modal-bump-price">
       </div>
+      <input class="modal-input" style="margin-bottom:16px;" placeholder="Bump product name, optional" id="modal-bump-label">
 
       <div id="modal-upsells-list">
         <div class="modal-upsell-row" data-upsell-idx="1">
@@ -3053,9 +3111,10 @@ function openAddOffer() {
             <div class="modal-label" style="margin-bottom:6px;">Upsell 1</div>
             <button class="edit-icon-btn" onclick="removeUpsellField(this)" title="Remove upsell" style="font-size:16px;opacity:0.4;">&#10005;</button>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
             <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-upsell-price>
           </div>
+          <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional" data-upsell-label>
         </div>
       </div>
     </div>
@@ -3083,9 +3142,10 @@ function addUpsellField() {
       <div class="modal-label" style="margin-bottom:6px;">Upsell ${nextNum}</div>
       <button class="edit-icon-btn" onclick="removeUpsellField(this)" title="Remove upsell" style="font-size:16px;opacity:0.4;">&#10005;</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
       <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price" data-upsell-price>
     </div>
+    <input class="modal-input" style="margin-bottom:16px;" placeholder="Product name, optional" data-upsell-label>
   `;
   container.appendChild(div);
 }
@@ -3111,20 +3171,26 @@ async function submitAddOffer() {
   if (!mainName) { showToast('Enter a main offer product name'); return; }
   if (isNaN(mainPrice)) { showToast('Enter a main offer price'); return; }
 
+  const mainLabel = (document.getElementById('modal-main-label').value || '').trim();
+
   const bumpPrice = parseFloat(document.getElementById('modal-bump-price').value);
   if (isNaN(bumpPrice)) { showToast('Enter a bump price'); return; }
 
+  const bumpLabel = (document.getElementById('modal-bump-label').value || '').trim();
+
   // Build products array: main offer, bump, then upsells
   const products = [
-    { name: mainName, position: 1, price: mainPrice },
-    { name: 'Bump', position: 2, price: bumpPrice }
+    { name: mainName, position: 1, price: mainPrice, label: mainLabel },
+    { name: 'Bump', position: 2, price: bumpPrice, label: bumpLabel }
   ];
 
-  const upsellPrices = document.querySelectorAll('[data-upsell-price]');
-  upsellPrices.forEach((input, i) => {
+  const upsellPriceInputs = document.querySelectorAll('[data-upsell-price]');
+  const upsellLabelInputs = document.querySelectorAll('[data-upsell-label]');
+  upsellPriceInputs.forEach((input, i) => {
     const price = parseFloat(input.value);
     if (!isNaN(price) && price > 0) {
-      products.push({ name: 'Upsell ' + (i + 1), position: 3 + i, price });
+      const label = (upsellLabelInputs[i] ? upsellLabelInputs[i].value || '' : '').trim();
+      products.push({ name: 'Upsell ' + (i + 1), position: 3 + i, price, label });
     }
   });
 
@@ -3154,8 +3220,11 @@ function openAddUpsell(offerName) {
   const html = `
     <div class="modal-title">Add Upsell to ${escapeHtml(offerName)}</div>
 
-    <div class="modal-label">${escapeHtml(upsellName)}</div>
-    <input class="modal-input" id="modal-upsell-price" type="number" step="0.01" placeholder="Price">
+    <div class="modal-label">${escapeHtml(upsellName)} — Price</div>
+    <input class="modal-input" id="modal-upsell-price" type="number" step="0.01" placeholder="e.g. 47">
+
+    <div class="modal-label">Product Name <span style="opacity:0.5;font-weight:400;">(optional)</span></div>
+    <input class="modal-input" id="modal-upsell-label" placeholder="e.g. Lighting Preset Pack">
 
     <div class="modal-actions">
       <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
@@ -3170,6 +3239,8 @@ async function submitAddUpsell(offerName, upsellName) {
   const price = parseFloat(document.getElementById('modal-upsell-price').value);
   if (isNaN(price)) { showToast('Enter a price'); return; }
 
+  const upsellLabel = (document.getElementById('modal-upsell-label').value || '').trim();
+
   const data = STATE.cache[STATE.activeClient.slug];
   const existingProducts = (data.config || [])
     .filter(c => c['Offer Name'] === offerName)
@@ -3181,14 +3252,16 @@ async function submitAddUpsell(offerName, upsellName) {
     name: p['Product Name'],
     position: parseInt(p['Position']),
     currentPrice: p['Current Price'],
-    active: p['Active']
+    active: p['Active'],
+    label: p['Product Label'] || ''
   }));
 
   products.push({
     name: upsellName,
     position: newPosition,
     currentPrice: price.toString(),
-    active: 'Yes'
+    active: 'Yes',
+    label: upsellLabel
   });
 
   const r1 = await postToWebApp('save_config', {

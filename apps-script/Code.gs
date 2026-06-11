@@ -461,6 +461,9 @@ function handleSaveConfig_(payload) {
         configSheet.getRange(r + 1, 3).setValue(product.position);     // Position
         configSheet.getRange(r + 1, 4).setValue(product.currentPrice); // Current Price
         configSheet.getRange(r + 1, 5).setValue(product.active);       // Active
+        if (product.label !== undefined) {
+          configSheet.getRange(r + 1, 6).setValue(product.label);      // Product Label
+        }
         found = true;
         break;
       }
@@ -473,7 +476,8 @@ function handleSaveConfig_(payload) {
         product.name,
         product.position,
         product.currentPrice,
-        product.active || 'Yes'
+        product.active || 'Yes',
+        product.label || ''
       ]);
     }
   }
@@ -635,7 +639,8 @@ function handleSetupNewOffer_(payload) {
       products[c].name,
       products[c].position || (c + 1),
       Number(products[c].price) || 0,
-      'Yes'
+      'Yes',
+      products[c].label || ''
     ]);
   }
 
@@ -892,7 +897,7 @@ function createConfigTab_(ss, slug) {
   if (existing) return existing;
 
   var sheet = ss.insertSheet(tabName);
-  var headers = ['Offer Name', 'Product Name', 'Position', 'Current Price', 'Active'];
+  var headers = ['Offer Name', 'Product Name', 'Position', 'Current Price', 'Active', 'Product Label'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
 
