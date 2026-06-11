@@ -115,8 +115,9 @@ function runDailyPull() {
 
 
 /**
- * Pull campaign-level insights from one Meta ad account for yesterday.
- * Appends rows to the client's Daily Meta tab.
+ * Pull campaign-level insights from one Meta ad account for the last 30 days.
+ * Uses dedup: only writes rows for (date, campaign) combos that don't already exist.
+ * This means it safely backfills missing days and never duplicates existing data.
  */
 function pullAccountData_(metaSheet, accountId, token) {
   // Clean account ID — add 'act_' prefix if not present
@@ -124,9 +125,18 @@ function pullAccountData_(metaSheet, accountId, token) {
     accountId = 'act_' + accountId;
   }
 
+  // Calculate last 30 days
+  var today = new Date();
+  var thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  var since = Utilities.formatDate(thirtyDaysAgo, 'America/Chicago', 'yyyy-MM-dd');
+  var until = Utilities.formatDate(today, 'America/Chicago', 'yyyy-MM-dd');
+
   const url = 'https://graph.facebook.com/v21.0/' + accountId + '/insights'
     + '?fields=campaign_name,spend,impressions,reach,clicks,actions,action_values,cpm,cpc,ctr,purchase_roas'
-    + '&date_preset=yesterday'
+    + '&time_range={"since":"' + since + '","until":"' + until + '"}'
+    + '&time_increment=1'
     + '&level=campaign'
     + '&limit=500'
     + '&access_token=' + token;
@@ -140,17 +150,42 @@ function pullAccountData_(metaSheet, accountId, token) {
   }
 
   const json = JSON.parse(response.getContentText());
-  const data = json.data || [];
+  var allData = json.data || [];
 
-  if (data.length === 0) {
+  // Handle pagination — Meta may return results across multiple pages
+  var nextUrl = json.paging && json.paging.next ? json.paging.next : null;
+  while (nextUrl) {
+    var nextResponse = UrlFetchApp.fetch(nextUrl, { muteHttpExceptions: true });
+    if (nextResponse.getResponseCode() !== 200) break;
+    var nextJson = JSON.parse(nextResponse.getContentText());
+    allData = allData.concat(nextJson.data || []);
+    nextUrl = nextJson.paging && nextJson.paging.next ? nextJson.paging.next : null;
+  }
+
+  if (allData.length === 0) {
     Logger.log('No campaign data returned for account ' + accountId);
     return;
   }
 
-  // Parse and append each campaign row
+  // Build set of existing (date|campaign) keys for dedup
+  var existingKeys = {};
+  var existingData = metaSheet.getDataRange().getValues();
+  for (var e = 1; e < existingData.length; e++) {
+    var existDate = String(existingData[e][0]);
+    if (existDate.length > 10) existDate = existDate.substring(0, 10);
+    var existCampaign = String(existingData[e][1]);
+    existingKeys[existDate + '|' + existCampaign] = true;
+  }
+
+  // Parse and collect only NEW rows
   const rows = [];
-  for (let i = 0; i < data.length; i++) {
-    const campaign = data[i];
+  for (let i = 0; i < allData.length; i++) {
+    const campaign = allData[i];
+    var dateStart = campaign.date_start || '';
+    var campaignName = campaign.campaign_name || '';
+
+    // Skip if this date+campaign combo already exists
+    if (existingKeys[dateStart + '|' + campaignName]) continue;
 
     // Extract actions — leads and purchases
     var leads = 0;
@@ -183,8 +218,8 @@ function pullAccountData_(metaSheet, accountId, token) {
     }
 
     rows.push([
-      campaign.date_start || '',                    // Date
-      campaign.campaign_name || '',                  // Campaign Name
+      dateStart,                                     // Date
+      campaignName,                                  // Campaign Name
       Number(campaign.spend) || 0,                   // Amount Spent
       Number(campaign.impressions) || 0,             // Impressions
       Number(campaign.reach) || 0,                   // Reach
@@ -199,10 +234,12 @@ function pullAccountData_(metaSheet, accountId, token) {
     ]);
   }
 
-  // Append all rows at once
+  // Append only new rows
   if (rows.length > 0) {
     metaSheet.getRange(metaSheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    Logger.log('Wrote ' + rows.length + ' rows for account ' + accountId);
+    Logger.log('Wrote ' + rows.length + ' NEW rows for account ' + accountId + ' (skipped ' + (allData.length - rows.length) + ' existing)');
+  } else {
+    Logger.log('All ' + allData.length + ' rows already exist for account ' + accountId + ' — nothing to write');
   }
 }
 

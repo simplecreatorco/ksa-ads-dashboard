@@ -1371,12 +1371,16 @@ async function fetchSheet(tabName) {
   try {
     const res = await fetch(sheetsUrl(tabName));
     if (!res.ok) {
-      console.warn(`Sheet fetch failed for "${tabName}": ${res.status}`);
+      console.warn(`Sheet fetch failed for "${tabName}": ${res.status} — check that tab name matches exactly in the sheet`);
       return [];
     }
     const data = await res.json();
-    if (!data.values || data.values.length < 2) return [];
+    if (!data.values || data.values.length < 2) {
+      console.warn(`Sheet "${tabName}": ${data.values ? data.values.length : 0} rows (need at least 2 — header + data)`);
+      return [];
+    }
     const headers = data.values[0];
+    console.log(`Sheet "${tabName}": ${data.values.length - 1} data rows, headers:`, headers);
     return data.values.slice(1).map(row => {
       const obj = {};
       headers.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
@@ -1435,7 +1439,9 @@ async function fetchClientData(slug) {
   const purchases = {};
   const purchasePromises = offers.map(async (offerName) => {
     const tabName = `${tabSlug} - ${offerName} Purchases`;
+    console.log('Fetching purchase tab:', tabName);
     purchases[offerName] = await fetchSheet(tabName);
+    console.log('Purchase data for "' + offerName + '":', purchases[offerName].length, 'rows');
   });
   await Promise.all(purchasePromises);
 
