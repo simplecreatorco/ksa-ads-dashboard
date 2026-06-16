@@ -375,31 +375,31 @@
     .cards-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 28px;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
     .summary-card {
       background: var(--ksa-white);
-      border-radius: 14px;
-      padding: 22px;
+      border-radius: 12px;
+      padding: 16px;
       border: 1.5px solid var(--ksa-border);
       box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     }
 
     .summary-card-eyebrow {
       font-family: var(--font-label);
-      font-size: 14px;
+      font-size: 12px;
       text-transform: uppercase;
-      letter-spacing: 3px;
+      letter-spacing: 2px;
       color: var(--ksa-orange);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .summary-card-value {
       font-family: var(--font-heading);
       font-weight: 700;
-      font-size: 30px;
+      font-size: 24px;
       color: var(--ksa-text);
       line-height: 1;
       margin-bottom: 4px;
@@ -407,7 +407,7 @@
 
     .summary-card-sub {
       font-family: var(--font-body);
-      font-size: 12px;
+      font-size: 11px;
       color: var(--ksa-text);
       opacity: 0.55;
     }
@@ -486,7 +486,7 @@
     .chart-canvas-wrap {
       position: relative;
       width: 100%;
-      height: 260px;
+      height: 320px;
     }
 
     .chart-canvas-wrap canvas {
@@ -584,13 +584,13 @@
     }
 
     .offer-product-table {
-      width: 220px;
+      width: 270px;
       flex-shrink: 0;
       background: var(--ksa-white);
       border: 1.5px solid var(--ksa-border);
       border-radius: 14px;
       padding: 16px 20px;
-      max-height: 340px;
+      max-height: 320px;
       overflow-y: auto;
     }
 
@@ -2300,11 +2300,6 @@ function renderOfferView() {
   const offerProfit = offerRevenue - offerSpend;
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
-  const firstProduct = configProducts[0];
-  const totalBuyers = firstProduct ? rangePurchases.reduce((s, r) => s + parseNum(r[productType(firstProduct)] || '0'), 0) : 0;
-  const offerAOV = totalBuyers > 0 ? offerRevenue / totalBuyers : 0;
-  const costPerBuyer = totalBuyers > 0 && offerSpend > 0 ? offerSpend / totalBuyers : 0;
-
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
@@ -2336,16 +2331,6 @@ function renderOfferView() {
         <div class="summary-card-value" style="color:${offerProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(offerProfit)}</div>
         <div class="summary-card-sub">Revenue − Spend</div>
       </div>
-      <div class="summary-card">
-        <div class="summary-card-eyebrow">AOV</div>
-        <div class="summary-card-value">${totalBuyers > 0 ? formatCurrency(offerAOV) : '—'}</div>
-        <div class="summary-card-sub">${totalBuyers} buyers</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-card-eyebrow">Cost Per Buyer</div>
-        <div class="summary-card-value">${costPerBuyer > 0 ? formatCurrency(costPerBuyer) : '—'}</div>
-        <div class="summary-card-sub">Spend ÷ buyers</div>
-      </div>
     </div>
 
     <div class="offer-chart-row">
@@ -2361,7 +2346,7 @@ function renderOfferView() {
           <canvas id="offer-chart"></canvas>
         </div>
       </div>
-      ${renderOfferProductTable(configProducts, rangePurchases)}
+      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue)}
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
@@ -2423,7 +2408,7 @@ function renderPurchaseStrip(products, last7Days) {
   `;
 }
 
-function renderOfferProductTable(products, rangePurchases) {
+function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue) {
   if (products.length === 0) return '';
 
   const firstProductName = productType(products[0]);
@@ -2436,34 +2421,44 @@ function renderOfferProductTable(products, rangePurchases) {
     });
   });
 
-  const totalTripwire = totals[firstProductName] || 1;
+  const totalMain = totals[firstProductName] || 0;
+  const aov = totalMain > 0 && offerRevenue > 0 ? offerRevenue / totalMain : 0;
+  const cpb = totalMain > 0 && offerSpend > 0 ? offerSpend / totalMain : 0;
 
   const rows = products.map((p, i) => {
     const ptype = productType(p);
     const pname = productDisplayName(p);
     const units = totals[ptype] || 0;
     const isFirst = i === 0;
-    const rate = isFirst ? '' : (totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) + '%' : '—');
+    const rate = isFirst ? '' : (totalMain > 0 ? ((units / totalMain) * 100).toFixed(0) + '%' : '—');
     return `
       <tr style="border-top:1px solid var(--ksa-border);">
-        <td style="padding:9px 0 9px 0;">
-          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;">${escapeHtml(ptype)}</div>
-          ${pname ? `<div style="font-family:var(--font-body);font-size:11px;color:var(--ksa-text);opacity:0.45;margin-top:1px;">${escapeHtml(pname)}</div>` : ''}
+        <td style="padding:7px 0;">
+          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;white-space:nowrap;">${escapeHtml(ptype)}${pname ? `<span style="font-weight:400;opacity:0.45;font-size:11px;"> — ${escapeHtml(pname)}</span>` : ''}</div>
         </td>
-        <td style="font-family:var(--font-heading);font-size:20px;font-weight:700;text-align:right;padding:9px 12px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
-        <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:9px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '' : rate}</td>
+        <td style="font-family:var(--font-heading);font-size:18px;font-weight:700;text-align:right;padding:7px 10px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
+        <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:7px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '' : rate}</td>
       </tr>`;
   }).join('');
 
   return `
     <div class="offer-product-table">
-      <div style="font-family:var(--font-label);font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--ksa-orange);margin-bottom:10px;">Products</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--ksa-border);">
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.4;margin-bottom:2px;">AOV</div>
+          <div style="font-family:var(--font-heading);font-size:20px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.4;margin-bottom:2px;">Cost/Buyer</div>
+          <div style="font-family:var(--font-heading);font-size:20px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
+        </div>
+      </div>
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr>
-            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
-            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;padding-right:12px;font-weight:400;">Units</th>
-            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;padding-right:10px;font-weight:400;">Units</th>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
