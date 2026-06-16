@@ -1160,6 +1160,34 @@ function renderOfferView() {
   const offerProfit = offerRevenue - offerSpend;
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+
+  const offerTypeCfg = configProducts[0] ? (configProducts[0]['Offer Type'] || 'Product Funnel') : 'Product Funnel';
+  const isLeadFunnel = offerTypeCfg === 'Lead Funnel';
+  const funnelLength = isLeadFunnel ? parseInt(configProducts[0]['Funnel Length'] || '0', 10) : 0;
+
+  let funnelStatus = null;
+  if (isLeadFunnel && funnelLength > 0 && configProducts[0]) {
+    const today = new Date();
+    const cutoff = new Date(today);
+    cutoff.setDate(today.getDate() - funnelLength);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const freebieName = productType(configProducts[0]);
+    let inFunnelLeads = 0, completedLeads = 0;
+    purchaseData.forEach(r => {
+      const d = normalizeDateStr(r['Date'] || '');
+      const leads = parseNum(r[freebieName] || '0');
+      if (d >= cutoffStr) inFunnelLeads += leads;
+      else completedLeads += leads;
+    });
+    const allOfferMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+    const completedSpend = allOfferMeta.filter(r => r.date < cutoffStr).reduce((s, r) => s + r.spend, 0);
+    const completedRevenue = purchaseData
+      .filter(r => normalizeDateStr(r['Date'] || '') < cutoffStr)
+      .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+    const adjROAS = completedSpend > 0 ? completedRevenue / completedSpend : null;
+    funnelStatus = { inFunnelLeads, completedLeads, adjROAS, funnelLength };
+  }
+
   const html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
@@ -1203,7 +1231,7 @@ function renderOfferView() {
           <canvas id="offer-chart"></canvas>
         </div>
       </div>
-      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue)}
+      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus)}
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
@@ -1220,33 +1248,77 @@ function renderOfferView() {
   requestAnimationFrame(() => drawOfferChart(offerRangeRows, offerPurchasesByDate));
 }
 
-function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue) {
+function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus) {
   if (!products || products.length === 0) return '';
 
   const firstProductName = productType(products[0]);
   const totals = {};
   products.forEach(p => { totals[productType(p)] = 0; });
-
   rangePurchases.forEach(row => {
-    products.forEach(p => {
-      totals[productType(p)] += parseNum(row[productType(p)] || '0');
-    });
+    products.forEach(p => { totals[productType(p)] += parseNum(row[productType(p)] || '0'); });
   });
 
-  const totalMain = totals[firstProductName] || 0;
-  const aov = totalMain > 0 && offerRevenue > 0 ? offerRevenue / totalMain : 0;
-  const cpb = totalMain > 0 && offerSpend > 0 ? offerSpend / totalMain : 0;
+  const totalBase = totals[firstProductName] || 0;
+
+  let statsHtml;
+  if (isLeadFunnel) {
+    const cpl = totalBase > 0 && offerSpend > 0 ? offerSpend / totalBase : 0;
+    const mainUnits = products[1] ? (totals[productType(products[1])] || 0) : 0;
+    const cvr = totalBase > 0 ? ((mainUnits / totalBase) * 100).toFixed(1) + '%' : '—';
+    const funnelLine = funnelStatus ? `
+      <div style="border-top:1px solid var(--ksa-border);margin-top:10px;padding-top:10px;display:flex;flex-wrap:wrap;gap:6px 16px;">
+        <div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">In Funnel</span>
+          <span style="font-weight:700;margin-left:4px;">${funnelStatus.inFunnelLeads}</span>
+        </div>
+        <div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">Completed</span>
+          <span style="font-weight:700;margin-left:4px;">${funnelStatus.completedLeads}</span>
+        </div>
+        ${funnelStatus.adjROAS !== null ? `<div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">Adj. ROAS</span>
+          <span style="font-weight:700;margin-left:4px;color:${funnelStatus.adjROAS >= SCALE_THRESHOLD ? 'var(--ksa-green)' : funnelStatus.adjROAS >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${funnelStatus.adjROAS.toFixed(2)}x</span>
+        </div>` : ''}
+      </div>` : '';
+    statsHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">CPL</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpl > 0 ? formatCurrency(cpl) : '—'}</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">CVR</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cvr}</div>
+        </div>
+      </div>
+      ${funnelLine}`;
+  } else {
+    const aov = totalBase > 0 && offerRevenue > 0 ? offerRevenue / totalBase : 0;
+    const cpb = totalBase > 0 && offerSpend > 0 ? offerSpend / totalBase : 0;
+    statsHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">Cost/Buyer</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
+        </div>
+      </div>`;
+  }
 
   const rows = products.map((p, i) => {
     const ptype = productType(p);
     const pname = productDisplayName(p);
     const units = totals[ptype] || 0;
     const isFirst = i === 0;
-    const rate = isFirst ? '' : (totalMain > 0 ? ((units / totalMain) * 100).toFixed(0) + '%' : '—');
+    const rate = isFirst ? '' : (totalBase > 0 ? ((units / totalBase) * 100).toFixed(0) + '%' : '—');
+    const rowLabel = isLeadFunnel && isFirst ? 'LEADS' : '';
     return `
       <tr style="border-top:1px solid var(--ksa-border);">
         <td style="padding:7px 0;">
-          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;white-space:nowrap;">${escapeHtml(ptype)}${pname ? `<span style="font-weight:400;opacity:0.45;font-size:11px;"> — ${escapeHtml(pname)}</span>` : ''}</div>
+          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;white-space:nowrap;">${escapeHtml(ptype)}${pname ? `<span style="font-weight:400;opacity:0.45;font-size:11px;"> — ${escapeHtml(pname)}</span>` : ''}${rowLabel ? `<span style="font-family:var(--font-label);font-size:9px;letter-spacing:1px;background:var(--ksa-pink-light);color:var(--ksa-pink);border-radius:3px;padding:1px 4px;margin-left:5px;vertical-align:middle;">${rowLabel}</span>` : ''}</div>
         </td>
         <td style="font-family:var(--font-heading);font-size:18px;font-weight:700;text-align:right;padding:7px 10px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
         <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:7px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '' : rate}</td>
@@ -1255,23 +1327,12 @@ function renderOfferProductTable(products, rangePurchases, offerSpend, offerReve
 
   return `
     <div class="offer-product-col">
-      <div class="offer-aov-box">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div>
-            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
-            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">Cost/Buyer</div>
-            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
-          </div>
-        </div>
-      </div>
+      <div class="offer-aov-box">${statsHtml}</div>
       <div class="offer-product-table">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr>
-              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:6px;font-weight:400;">${isLeadFunnel ? 'Freebie → Funnel' : 'Product'}</th>
               <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;padding-right:10px;font-weight:400;">Units</th>
               <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
             </tr>

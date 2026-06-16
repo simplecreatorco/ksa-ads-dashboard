@@ -2308,6 +2308,11 @@ function renderOfferView() {
     })
     .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
 
+  // Offer type + funnel settings
+  const offerTypeCfg = configProducts[0] ? (configProducts[0]['Offer Type'] || 'Product Funnel') : 'Product Funnel';
+  const isLeadFunnel = offerTypeCfg === 'Lead Funnel';
+  const funnelLength = isLeadFunnel ? parseInt(configProducts[0]['Funnel Length'] || '0', 10) : 0;
+
   // Offer-level summary stats
   const offerSpend = offerRangeRows.reduce((s, r) => s + r.spend, 0);
   const offerRevenue = rangePurchases.reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
@@ -2315,6 +2320,34 @@ function renderOfferView() {
   const offerProfit = offerRevenue - offerSpend;
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+
+  // Lead Funnel: funnel status and adjusted ROAS (uses all purchase history, not range-filtered)
+  let funnelStatus = null;
+  if (isLeadFunnel && funnelLength > 0 && configProducts[0]) {
+    const today = new Date();
+    const cutoff = new Date(today);
+    cutoff.setDate(today.getDate() - funnelLength);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const freebieName = productType(configProducts[0]);
+
+    let inFunnelLeads = 0, completedLeads = 0;
+    purchaseData.forEach(r => {
+      const d = normalizeDateStr(r['Date'] || '');
+      const leads = parseNum(r[freebieName] || '0');
+      if (d >= cutoffStr) inFunnelLeads += leads;
+      else completedLeads += leads;
+    });
+
+    const allOfferMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+    const completedSpend = allOfferMeta.filter(r => r.date < cutoffStr).reduce((s, r) => s + r.spend, 0);
+    const completedRevenue = purchaseData
+      .filter(r => normalizeDateStr(r['Date'] || '') < cutoffStr)
+      .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+    const adjROAS = completedSpend > 0 ? completedRevenue / completedSpend : null;
+
+    funnelStatus = { inFunnelLeads, completedLeads, adjROAS, funnelLength };
+  }
+
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
@@ -2361,7 +2394,7 @@ function renderOfferView() {
           <canvas id="offer-chart"></canvas>
         </div>
       </div>
-      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue)}
+      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus)}
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
@@ -2423,33 +2456,78 @@ function renderPurchaseStrip(products, last7Days) {
   `;
 }
 
-function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue) {
+function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus) {
   if (products.length === 0) return '';
 
   const firstProductName = productType(products[0]);
   const totals = {};
   products.forEach(p => { totals[productType(p)] = 0; });
-
   rangePurchases.forEach(row => {
-    products.forEach(p => {
-      totals[productType(p)] += parseNum(row[productType(p)] || '0');
-    });
+    products.forEach(p => { totals[productType(p)] += parseNum(row[productType(p)] || '0'); });
   });
 
-  const totalMain = totals[firstProductName] || 0;
-  const aov = totalMain > 0 && offerRevenue > 0 ? offerRevenue / totalMain : 0;
-  const cpb = totalMain > 0 && offerSpend > 0 ? offerSpend / totalMain : 0;
+  const totalBase = totals[firstProductName] || 0; // leads for Lead Funnel, main units for Product Funnel
+
+  // Top stats card content differs by funnel type
+  let statsHtml;
+  if (isLeadFunnel) {
+    const cpl = totalBase > 0 && offerSpend > 0 ? offerSpend / totalBase : 0;
+    const mainUnits = products[1] ? (totals[productType(products[1])] || 0) : 0;
+    const cvr = totalBase > 0 ? ((mainUnits / totalBase) * 100).toFixed(1) + '%' : '—';
+    const funnelLine = funnelStatus ? `
+      <div style="border-top:1px solid var(--ksa-border);margin-top:10px;padding-top:10px;display:flex;flex-wrap:wrap;gap:6px 16px;">
+        <div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">In Funnel</span>
+          <span style="font-weight:700;margin-left:4px;">${funnelStatus.inFunnelLeads}</span>
+        </div>
+        <div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">Completed</span>
+          <span style="font-weight:700;margin-left:4px;">${funnelStatus.completedLeads}</span>
+        </div>
+        ${funnelStatus.adjROAS !== null ? `<div style="font-family:var(--font-body);font-size:12px;color:var(--ksa-text);">
+          <span style="opacity:0.5;">Adj. ROAS</span>
+          <span style="font-weight:700;margin-left:4px;color:${funnelStatus.adjROAS >= SCALE_THRESHOLD ? 'var(--ksa-green)' : funnelStatus.adjROAS >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${funnelStatus.adjROAS.toFixed(2)}x</span>
+        </div>` : ''}
+      </div>` : '';
+    statsHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">CPL</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpl > 0 ? formatCurrency(cpl) : '—'}</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">CVR</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cvr}</div>
+        </div>
+      </div>
+      ${funnelLine}`;
+  } else {
+    const aov = totalBase > 0 && offerRevenue > 0 ? offerRevenue / totalBase : 0;
+    const cpb = totalBase > 0 && offerSpend > 0 ? offerSpend / totalBase : 0;
+    statsHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">Cost/Buyer</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
+        </div>
+      </div>`;
+  }
 
   const rows = products.map((p, i) => {
     const ptype = productType(p);
     const pname = productDisplayName(p);
     const units = totals[ptype] || 0;
     const isFirst = i === 0;
-    const rate = isFirst ? '' : (totalMain > 0 ? ((units / totalMain) * 100).toFixed(0) + '%' : '—');
+    const rate = isFirst ? '' : (totalBase > 0 ? ((units / totalBase) * 100).toFixed(0) + '%' : '—');
+    const rowLabel = isLeadFunnel && isFirst ? 'LEADS' : '';
     return `
       <tr style="border-top:1px solid var(--ksa-border);">
         <td style="padding:7px 0;">
-          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;white-space:nowrap;">${escapeHtml(ptype)}${pname ? `<span style="font-weight:400;opacity:0.45;font-size:11px;"> — ${escapeHtml(pname)}</span>` : ''}</div>
+          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;white-space:nowrap;">${escapeHtml(ptype)}${pname ? `<span style="font-weight:400;opacity:0.45;font-size:11px;"> — ${escapeHtml(pname)}</span>` : ''}${rowLabel ? `<span style="font-family:var(--font-label);font-size:9px;letter-spacing:1px;background:var(--ksa-pink-light);color:var(--ksa-pink);border-radius:3px;padding:1px 4px;margin-left:5px;vertical-align:middle;">${rowLabel}</span>` : ''}</div>
         </td>
         <td style="font-family:var(--font-heading);font-size:18px;font-weight:700;text-align:right;padding:7px 10px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
         <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:7px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '' : rate}</td>
@@ -2458,23 +2536,12 @@ function renderOfferProductTable(products, rangePurchases, offerSpend, offerReve
 
   return `
     <div class="offer-product-col">
-      <div class="offer-aov-box">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div>
-            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
-            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">Cost/Buyer</div>
-            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
-          </div>
-        </div>
-      </div>
+      <div class="offer-aov-box">${statsHtml}</div>
       <div class="offer-product-table">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr>
-              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:6px;font-weight:400;">${isLeadFunnel ? 'Freebie → Funnel' : 'Product'}</th>
               <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;padding-right:10px;font-weight:400;">Units</th>
               <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
             </tr>
@@ -3325,8 +3392,29 @@ function openAddOffer() {
   const html = `
     <div class="modal-title">Add Offer</div>
 
+    <input type="hidden" id="modal-offer-type" value="product">
+
     <div class="modal-label">Offer Name</div>
     <input class="modal-input" id="modal-offer-name">
+
+    <div class="modal-label" style="margin-bottom:6px;">Offer Type</div>
+    <div style="display:flex;border:1.5px solid var(--ksa-border);border-radius:8px;overflow:hidden;margin-bottom:20px;">
+      <button id="modal-type-product" onclick="setAddOfferType('product')" style="flex:1;padding:9px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;background:var(--ksa-pink);color:white;">Product Funnel</button>
+      <button id="modal-type-lead" onclick="setAddOfferType('lead')" style="flex:1;padding:9px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;background:var(--ksa-white);color:var(--ksa-text);">Lead Funnel</button>
+    </div>
+
+    <div id="modal-lead-section" style="display:none;border-top:1px solid var(--ksa-border);padding-top:16px;margin-bottom:4px;">
+      <div class="modal-label">Freebie</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input class="modal-input" style="margin-bottom:0;flex:2;" placeholder="Product Name" id="modal-freebie-name">
+        <input class="modal-input" style="margin-bottom:0;flex:1;" type="number" step="0.01" placeholder="Price ($0 if free)" id="modal-freebie-price">
+      </div>
+      <div class="modal-label">Funnel Length</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <input class="modal-input" id="modal-funnel-length" type="number" min="1" placeholder="e.g. 5" style="margin-bottom:0;width:80px;">
+        <span style="font-family:var(--font-body);font-size:13px;opacity:0.6;">days</span>
+      </div>
+    </div>
 
     <div style="border-top:1px solid var(--ksa-border);padding-top:16px;margin-top:4px;">
       <div class="modal-label">Main Offer</div>
@@ -3366,6 +3454,15 @@ function openAddOffer() {
   document.getElementById('modal-overlay').classList.add('show');
 }
 
+function setAddOfferType(type) {
+  document.getElementById('modal-offer-type').value = type;
+  const activeStyle = 'flex:1;padding:9px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;background:var(--ksa-pink);color:white;';
+  const inactiveStyle = 'flex:1;padding:9px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;background:var(--ksa-white);color:var(--ksa-text);';
+  document.getElementById('modal-type-product').style.cssText = type === 'product' ? activeStyle : inactiveStyle;
+  document.getElementById('modal-type-lead').style.cssText = type === 'lead' ? activeStyle : inactiveStyle;
+  document.getElementById('modal-lead-section').style.display = type === 'lead' ? 'block' : 'none';
+}
+
 function addUpsellField() {
   const container = document.getElementById('modal-upsells-list');
   const existingCount = container.querySelectorAll('.modal-upsell-row').length;
@@ -3402,36 +3499,60 @@ async function submitAddOffer() {
   const offerName = document.getElementById('modal-offer-name').value.trim();
   if (!offerName) { showToast('Enter an offer name'); return; }
 
+  const isLeadFunnel = document.getElementById('modal-offer-type').value === 'lead';
+  const offerType = isLeadFunnel ? 'Lead Funnel' : 'Product Funnel';
+
   const mainName = document.getElementById('modal-main-name').value.trim();
   const mainPrice = parseFloat(document.getElementById('modal-main-price').value);
   if (!mainName) { showToast('Enter a main offer product name'); return; }
   if (isNaN(mainPrice)) { showToast('Enter a main offer price'); return; }
 
+  const products = [];
+  let bumpPosition, upsellStartPosition;
+
+  if (isLeadFunnel) {
+    const freebieName = document.getElementById('modal-freebie-name').value.trim();
+    const freebiePrice = parseFloat(document.getElementById('modal-freebie-price').value) || 0;
+    const funnelLength = parseInt(document.getElementById('modal-funnel-length').value) || 0;
+    if (!freebieName) { showToast('Enter a freebie product name'); return; }
+    products.push({ name: freebieName, position: 1, price: freebiePrice, label: '' });
+    products.push({ name: mainName, position: 2, price: mainPrice, label: '' });
+    bumpPosition = 3;
+    upsellStartPosition = 4;
+    Object.assign(submitAddOffer, { _funnelLength: funnelLength });
+  } else {
+    products.push({ name: mainName, position: 1, price: mainPrice, label: '' });
+    bumpPosition = 2;
+    upsellStartPosition = 3;
+    Object.assign(submitAddOffer, { _funnelLength: 0 });
+  }
+
   const bumpLabel = (document.getElementById('modal-bump-label').value || '').trim();
   const bumpPrice = parseFloat(document.getElementById('modal-bump-price').value);
-  if (isNaN(bumpPrice)) { showToast('Enter a bump price'); return; }
+  if (!isNaN(bumpPrice) && bumpPrice > 0) {
+    products.push({ name: 'Bump', position: bumpPosition, price: bumpPrice, label: bumpLabel });
+  }
 
-  // Build products array: main offer (Product Name = col B type), bump, then upsells
-  const products = [
-    { name: mainName, position: 1, price: mainPrice, label: '' },
-    { name: 'Bump', position: 2, price: bumpPrice, label: bumpLabel }
-  ];
-
-  // Each upsell row has [data-upsell-label] then [data-upsell-price]
   const upsellRows = document.querySelectorAll('.modal-upsell-row');
-  upsellRows.forEach((row, i) => {
+  let upsellNum = 1;
+  upsellRows.forEach(row => {
     const priceInput = row.querySelector('[data-upsell-price]');
     const labelInput = row.querySelector('[data-upsell-label]');
     const price = parseFloat(priceInput ? priceInput.value : '');
     if (!isNaN(price) && price > 0) {
       const label = (labelInput ? labelInput.value || '' : '').trim();
-      products.push({ name: 'Upsell ' + (i + 1), position: 3 + i, price, label });
+      products.push({ name: 'Upsell ' + upsellNum, position: upsellStartPosition + upsellNum - 1, price, label });
+      upsellNum++;
     }
   });
+
+  const funnelLength = isLeadFunnel ? (parseInt(document.getElementById('modal-funnel-length').value) || 0) : 0;
 
   await postToWebApp('setup_new_offer', {
     clientSlug: STATE.activeClient.slug,
     offerName,
+    offerType,
+    funnelLength,
     products
   });
 
