@@ -1281,7 +1281,7 @@ function renderOfferProductTable(products, rangePurchases, offerSpend, offerReve
         </div>` : ''}
       </div>` : '';
     statsHtml = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
         <div>
           <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">CPL</div>
           <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpl > 0 ? formatCurrency(cpl) : '—'}</div>
@@ -1296,7 +1296,7 @@ function renderOfferProductTable(products, rangePurchases, offerSpend, offerReve
     const aov = totalBase > 0 && offerRevenue > 0 ? offerRevenue / totalBase : 0;
     const cpb = totalBase > 0 && offerSpend > 0 ? offerSpend / totalBase : 0;
     statsHtml = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
         <div>
           <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
           <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
