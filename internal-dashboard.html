@@ -2226,6 +2226,9 @@ function renderOfferCards(data) {
   const { start: cardRangeStart, end: cardRangeEnd } = getDateRange();
 
   return data.offers.map(offerName => {
+    const offerCfgRow = (data.config || []).find(c => c['Offer Name'] === offerName);
+    const offerType = offerCfgRow ? (offerCfgRow['Offer Type'] || 'Product Funnel') : 'Product Funnel';
+
     // Spend: Daily Meta filtered to this offer's campaigns
     const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
     const rangeRows = filterByDateRange(offerMeta);
@@ -2245,9 +2248,16 @@ function renderOfferCards(data) {
     const roasColor = roas >= SCALE_THRESHOLD ? 'var(--ksa-green)' :
                       roas >= BREAK_EVEN ? 'var(--ksa-flag)' : 'var(--ksa-red)';
 
+    const typeBadge = offerType === 'Lead Funnel'
+      ? `<span style="display:inline-block;font-family:var(--font-label);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ksa-pink);background:var(--ksa-pink-light);border-radius:3px;padding:2px 5px;margin-top:4px;">Lead Funnel</span>`
+      : offerType === 'IG Profile Visits'
+      ? `<span style="display:inline-block;font-family:var(--font-label);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ksa-orange);background:#FFF3ED;border-radius:3px;padding:2px 5px;margin-top:4px;">IG Profile</span>`
+      : '';
+
     return `
       <div class="offer-card" onclick="openOfferView('${escapeAttr(offerName)}')">
         <div class="offer-card-name">${escapeHtml(offerName)}</div>
+        ${typeBadge ? `<div style="margin-bottom:6px;">${typeBadge}</div>` : ''}
         <div class="offer-card-metrics">
           <div>
             <div class="offer-card-metric-label">ROAS</div>
