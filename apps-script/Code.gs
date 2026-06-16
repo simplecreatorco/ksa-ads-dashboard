@@ -407,6 +407,12 @@ function doPost(e) {
       case 'log_ig_purchase':
         result = handleLogIGPurchase_(payload);
         break;
+      case 'delete_ig_purchase':
+        result = handleDeleteIGPurchase_(payload);
+        break;
+      case 'reorder_offers':
+        result = handleReorderOffers_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -746,6 +752,91 @@ function handleLogIGPurchase_(payload) {
     payload.description || '',
     Number(payload.revenue) || 0
   ]);
+
+  return { success: true };
+}
+
+
+/**
+ * handleDeleteIGPurchase_ — Delete a row from the IG Profile Purchases tab by matching date + description + revenue
+ * Payload: { clientSlug, date, description, revenue }
+ */
+function handleDeleteIGPurchase_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var igTabName = slug + ' - IG Profile Purchases';
+  var igSheet = ss.getSheetByName(igTabName);
+  if (!igSheet) return { success: false, error: 'IG Profile Purchases tab not found for ' + slug };
+
+  var data = igSheet.getDataRange().getValues();
+  var targetDate = String(payload.date || '').trim();
+  var targetDesc = String(payload.description || '').trim();
+  var targetRev  = Number(payload.revenue) || 0;
+
+  for (var i = 1; i < data.length; i++) {
+    var rowDate = String(data[i][0] || '').trim();
+    var rowDesc = String(data[i][1] || '').trim();
+    var rowRev  = Number(data[i][2]) || 0;
+    if (rowDate === targetDate && rowDesc === targetDesc && rowRev === targetRev) {
+      igSheet.deleteRow(i + 1); // sheet rows are 1-indexed; row 1 is header
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Matching row not found' };
+}
+
+
+/**
+ * handleReorderOffers_ — Reorder offer blocks in the Config tab by rearranging rows
+ * Payload: { clientSlug, offerOrder: ['Offer A', 'Offer B', ...] }
+ */
+function handleReorderOffers_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var offerOrder = payload.offerOrder;
+  if (!offerOrder || !offerOrder.length) return { success: false, error: 'No offerOrder provided' };
+
+  var configTabName = slug + ' - Config';
+  var configSheet = ss.getSheetByName(configTabName);
+  if (!configSheet) return { success: false, error: 'Config tab not found for ' + slug };
+
+  var allData = configSheet.getDataRange().getValues();
+  if (allData.length < 2) return { success: true }; // nothing to reorder
+
+  var headers = allData[0];
+  var rows = allData.slice(1);
+
+  // Group data rows by offer name (col A)
+  var grouped = {};
+  rows.forEach(function(row) {
+    var name = String(row[0] || '').trim();
+    if (!grouped[name]) grouped[name] = [];
+    grouped[name].push(row);
+  });
+
+  // Rebuild in requested order, then append any offers not in the list
+  var newRows = [];
+  offerOrder.forEach(function(name) {
+    (grouped[name] || []).forEach(function(row) { newRows.push(row); });
+    delete grouped[name];
+  });
+  Object.values(grouped).forEach(function(g) {
+    g.forEach(function(row) { newRows.push(row); });
+  });
+
+  // Clear existing data rows and rewrite
+  var numCols = headers.length;
+  if (rows.length > 0) {
+    configSheet.getRange(2, 1, rows.length, numCols).clearContent();
+  }
+  if (newRows.length > 0) {
+    configSheet.getRange(2, 1, newRows.length, numCols).setValues(newRows);
+  }
 
   return { success: true };
 }

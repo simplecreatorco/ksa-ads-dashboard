@@ -910,7 +910,9 @@
       border-radius: 14px;
       padding: 20px;
       margin-bottom: 16px;
+      transition: opacity 0.15s;
     }
+    .offer-block.drag-over { outline: 2px dashed var(--ksa-pink); }
 
     .offer-block-header {
       display: flex;
@@ -918,6 +920,14 @@
       justify-content: space-between;
       margin-bottom: 12px;
     }
+    .offer-drag {
+      cursor: grab;
+      opacity: 0.35;
+      font-size: 16px;
+      padding: 4px 8px 4px 0;
+      user-select: none;
+    }
+    .offer-drag:active { cursor: grabbing; }
 
     .offer-block-name {
       font-family: var(--font-heading);
@@ -3188,11 +3198,14 @@ function openSettings() {
       ${offers.map(offerName => {
         const products = offerProducts[offerName] || [];
         return `
-          <div class="offer-block">
+          <div class="offer-block" data-offer-name="${escapeAttr(offerName)}">
             <div class="offer-block-header">
-              <div class="offer-block-name">
-                ${escapeHtml(offerName)}
-                <button class="edit-icon-btn" onclick="openRenameOffer('${escapeAttr(offerName)}')" title="Rename offer">&#9998;</button>
+              <div style="display:flex;align-items:center;gap:2px;">
+                <span class="offer-drag" title="Drag to reorder">&#9776;</span>
+                <div class="offer-block-name">
+                  ${escapeHtml(offerName)}
+                  <button class="edit-icon-btn" onclick="openRenameOffer('${escapeAttr(offerName)}')" title="Rename offer">&#9998;</button>
+                </div>
               </div>
               <div class="offer-block-actions">
                 <button class="small-btn small-btn-outline" onclick="openAddUpsell('${escapeAttr(offerName)}')">+ Add Upsell</button>
@@ -3223,8 +3236,9 @@ function openSettings() {
   document.getElementById('settings-overlay').classList.add('show');
   document.getElementById('settings-panel').classList.add('open');
 
-  // Set up drag and drop for product reordering
+  // Set up drag and drop for product and offer reordering
   setupProductDragDrop();
+  setupOfferDragDrop();
 }
 
 function closeSettings() {
@@ -3343,6 +3357,71 @@ async function saveProductOrder(offerName) {
   // Refresh client data
   await fetchClientData(STATE.activeClient.slug);
   openSettings(); // Refresh the settings panel to show updated names
+}
+
+function setupOfferDragDrop() {
+  const blocks = document.querySelectorAll('.offer-block');
+  let draggedBlock = null;
+
+  blocks.forEach(block => {
+    const handle = block.querySelector('.offer-drag');
+    if (!handle) return;
+
+    handle.addEventListener('mousedown', () => { block.draggable = true; });
+    handle.addEventListener('mouseup', () => { block.draggable = false; });
+
+    block.addEventListener('dragstart', (e) => {
+      draggedBlock = block;
+      block.style.opacity = '0.45';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    block.addEventListener('dragend', () => {
+      block.style.opacity = '1';
+      block.draggable = false;
+      draggedBlock = null;
+      document.querySelectorAll('.offer-block').forEach(b => b.classList.remove('drag-over'));
+    });
+
+    block.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.offer-block').forEach(b => b.classList.remove('drag-over'));
+      if (draggedBlock && draggedBlock !== block) block.classList.add('drag-over');
+    });
+
+    block.addEventListener('drop', (e) => {
+      e.preventDefault();
+      block.classList.remove('drag-over');
+      if (!draggedBlock || draggedBlock === block) return;
+
+      const parent = block.parentElement;
+      const allBlocks = [...parent.querySelectorAll('.offer-block')];
+      const dragIdx = allBlocks.indexOf(draggedBlock);
+      const dropIdx = allBlocks.indexOf(block);
+
+      if (dragIdx < dropIdx) {
+        parent.insertBefore(draggedBlock, block.nextSibling);
+      } else {
+        parent.insertBefore(draggedBlock, block);
+      }
+
+      saveOfferOrder();
+    });
+  });
+}
+
+async function saveOfferOrder() {
+  const blocks = document.querySelectorAll('.offer-block');
+  const offerOrder = [...blocks].map(b => b.dataset.offerName);
+  const result = await postToWebApp('reorder_offers', {
+    clientSlug: STATE.activeClient.slug,
+    offerOrder
+  });
+  if (result && result.success) {
+    await fetchClientData(STATE.activeClient.slug);
+    showToast('Offer order saved');
+  }
 }
 
 async function saveClientSettings() {
@@ -4138,15 +4217,24 @@ async function deleteIGPurchase(slug, rowIndex) {
   if (!confirm('Delete this purchase?')) return;
   const data = STATE.cache[slug];
   if (!data) return;
-  // Sort descending (same order as display) to get the right row index
   const sorted = [...(data.igPurchases || [])].sort((a, b) =>
     normalizeDateStr(b['Date'] || '').localeCompare(normalizeDateStr(a['Date'] || ''))
   );
   const row = sorted[rowIndex];
   if (!row) return;
-  // Re-fetch and re-render — for now delete via re-logging approach isn't possible
-  // without a delete endpoint; show a notice
-  showToast('To delete, remove the row directly from the IG Profile Purchases sheet.', true);
+  const res = await postToWebApp('delete_ig_purchase', {
+    clientSlug: slug,
+    date: row['Date'] || '',
+    description: row['Description'] || '',
+    revenue: row['Revenue'] || ''
+  });
+  if (res && res.success) {
+    await fetchClientData(slug);
+    renderOfferView();
+    showToast('Purchase deleted.');
+  } else {
+    showToast('Error deleting purchase.', true);
+  }
 }
 
 function openLogPurchaseModal(offerName) {
