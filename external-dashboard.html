@@ -449,6 +449,22 @@
     .back-btn:hover { opacity: 0.8; }
 
     /* Purchase summary strip */
+    .offer-chart-row {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+
+    .offer-product-table {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--ksa-white);
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
     .purchase-strip {
       display: flex;
       gap: 12px;
@@ -1111,6 +1127,14 @@ function renderOfferView() {
     })
     .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
 
+  // Offer-level summary stats
+  const offerSpend = offerRangeRows.reduce((s, r) => s + r.spend, 0);
+  const offerRevenue = rangePurchases.reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+  const offerROAS = offerSpend > 0 ? offerRevenue / offerSpend : 0;
+  const offerProfit = offerRevenue - offerSpend;
+  const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
+                     STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+
   const html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
@@ -1118,19 +1142,43 @@ function renderOfferView() {
 
     ${renderDateBar()}
 
-    ${renderPurchaseStrip(configProducts, rangePurchases)}
+    <div class="cards-row">
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Ad Spend</div>
+        <div class="summary-card-value">${formatCurrency(offerSpend)}</div>
+        <div class="summary-card-sub">${rangeLabel}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Revenue</div>
+        <div class="summary-card-value">${formatCurrency(offerRevenue)}</div>
+        <div class="summary-card-sub">From purchase log</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">ROAS</div>
+        <div class="summary-card-value" style="color:${offerROAS >= SCALE_THRESHOLD ? 'var(--ksa-green)' : offerROAS >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${offerSpend > 0 ? offerROAS.toFixed(2) + 'x' : '—'}</div>
+        <div class="summary-card-sub">${offerSpend === 0 ? 'No spend data' : offerROAS >= SCALE_THRESHOLD ? 'Above scale threshold' : offerROAS >= BREAK_EVEN ? 'Above break-even' : 'Below break-even'}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Profit</div>
+        <div class="summary-card-value" style="color:${offerProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(offerProfit)}</div>
+        <div class="summary-card-sub">Revenue − Spend</div>
+      </div>
+    </div>
 
-    <div class="chart-wrap">
-      <div class="chart-header">
-        <div class="chart-title">Offer Performance</div>
-        <div class="chart-toggle">
-          <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
-          <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
+    <div class="offer-chart-row">
+      <div class="chart-wrap" style="flex:1;min-width:0;margin-bottom:0;">
+        <div class="chart-header">
+          <div class="chart-title">Offer Performance</div>
+          <div class="chart-toggle">
+            <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
+            <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="offer-chart"></canvas>
         </div>
       </div>
-      <div class="chart-canvas-wrap">
-        <canvas id="offer-chart"></canvas>
-      </div>
+      ${renderOfferProductTable(configProducts, rangePurchases)}
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
@@ -1145,6 +1193,39 @@ function renderOfferView() {
   });
 
   requestAnimationFrame(() => drawOfferChart(offerRangeRows, offerPurchasesByDate));
+}
+
+function renderOfferProductTable(products, rangePurchases) {
+  if (!products || products.length === 0) return '';
+  const sorted = [...products].sort((a, b) => (a.position || 0) - (b.position || 0));
+  const tripwireUnits = (() => {
+    const first = sorted[0];
+    if (!first) return 0;
+    return rangePurchases.reduce((s, r) => s + (parseInt(r[first.name] || r[productDisplayName(first)] || '0', 10) || 0), 0);
+  })();
+  const rows = sorted.map((p, i) => {
+    const ptype = productType(p);
+    const pname = productDisplayName(p);
+    const label = pname ? `${ptype}<br><span style="font-size:10px;opacity:0.55;font-family:var(--font-body);font-weight:400;letter-spacing:0;text-transform:none;">${escapeHtml(pname)}</span>` : escapeHtml(ptype);
+    const units = rangePurchases.reduce((s, r) => s + (parseInt(r[p.name] || r[pname] || '0', 10) || 0), 0);
+    const conv = (i === 0) ? '' : (tripwireUnits > 0 ? Math.round((units / tripwireUnits) * 100) + '%' : '—');
+    return `<tr>
+      <td style="padding:6px 8px 6px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1px;border-bottom:1px solid var(--ksa-border);">${label}</td>
+      <td style="padding:6px 4px;text-align:center;font-size:13px;font-weight:700;border-bottom:1px solid var(--ksa-border);">${units}</td>
+      <td style="padding:6px 0 6px 4px;text-align:center;font-size:12px;opacity:0.65;border-bottom:1px solid var(--ksa-border);">${i === 0 ? 'Tripwire' : conv}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="offer-product-table">
+    <div style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;color:var(--ksa-pink);margin-bottom:12px;">PRODUCT SALES</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:left;padding-bottom:8px;opacity:0.5;">PRODUCT</th>
+        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:center;padding-bottom:8px;opacity:0.5;">UNITS</th>
+        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:center;padding-bottom:8px;opacity:0.5;">CONV.</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
 }
 
 function renderPurchaseStrip(products, last7Days) {
