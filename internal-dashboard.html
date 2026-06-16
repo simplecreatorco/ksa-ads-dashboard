@@ -576,6 +576,22 @@
       padding-bottom: 4px;
     }
 
+    .offer-chart-row {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+
+    .offer-product-table {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--ksa-white);
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
     .purchase-cell {
       background: var(--ksa-white);
       border-radius: 14px;
@@ -2148,11 +2164,13 @@ function renderAccountOverview() {
   // Draw chart after DOM update
   requestAnimationFrame(() => drawMainChart(rangeRows, mainPurchasesByDate));
 
-  // Redraw expanded mini chart if one is open
+  // Redraw expanded mini chart if one is open, filtered to current date range
   if (STATE.expandedCampaign) {
     const camp = campaignStatuses.find(c => c.name === STATE.expandedCampaign);
     if (camp) {
-      requestAnimationFrame(() => drawMiniChart(camp.name, camp.rows));
+      const { start: mcStart, end: mcEnd } = getDateRange();
+      const filteredRows = camp.rows.filter(r => r.date >= mcStart && r.date <= mcEnd);
+      requestAnimationFrame(() => drawMiniChart(camp.name, filteredRows));
     }
   }
 }
@@ -2265,6 +2283,14 @@ function renderOfferView() {
     })
     .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
 
+  // Offer-level summary stats
+  const offerSpend = offerRangeRows.reduce((s, r) => s + r.spend, 0);
+  const offerRevenue = rangePurchases.reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+  const offerROAS = offerSpend > 0 ? offerRevenue / offerSpend : 0;
+  const offerProfit = offerRevenue - offerSpend;
+  const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
+                     STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+
   let html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
 
@@ -2275,19 +2301,43 @@ function renderOfferView() {
 
     ${renderDateBar()}
 
-    ${renderPurchaseStrip(configProducts, rangePurchases)}
+    <div class="cards-row">
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Ad Spend</div>
+        <div class="summary-card-value">${formatCurrency(offerSpend)}</div>
+        <div class="summary-card-sub">${rangeLabel}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Revenue</div>
+        <div class="summary-card-value">${formatCurrency(offerRevenue)}</div>
+        <div class="summary-card-sub">From purchase log</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">ROAS</div>
+        <div class="summary-card-value" style="color:${offerROAS >= SCALE_THRESHOLD ? 'var(--ksa-green)' : offerROAS >= BREAK_EVEN ? 'var(--ksa-text)' : 'var(--ksa-red)'}">${offerSpend > 0 ? offerROAS.toFixed(2) + 'x' : '—'}</div>
+        <div class="summary-card-sub">${offerSpend === 0 ? 'No spend data' : offerROAS >= SCALE_THRESHOLD ? 'Above scale threshold' : offerROAS >= BREAK_EVEN ? 'Above break-even' : 'Below break-even'}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Profit</div>
+        <div class="summary-card-value" style="color:${offerProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(offerProfit)}</div>
+        <div class="summary-card-sub">Revenue − Spend</div>
+      </div>
+    </div>
 
-    <div class="chart-wrap">
-      <div class="chart-header">
-        <div class="chart-title">Offer Performance</div>
-        <div class="chart-toggle">
-          <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
-          <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
+    <div class="offer-chart-row">
+      <div class="chart-wrap" style="flex:1;min-width:0;margin-bottom:0;">
+        <div class="chart-header">
+          <div class="chart-title">Offer Performance</div>
+          <div class="chart-toggle">
+            <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
+            <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="offer-chart"></canvas>
         </div>
       </div>
-      <div class="chart-canvas-wrap">
-        <canvas id="offer-chart"></canvas>
-      </div>
+      ${renderOfferProductTable(configProducts, rangePurchases)}
     </div>
 
     ${renderPurchaseLog(offerName, configProducts, purchaseData)}
@@ -2349,6 +2399,54 @@ function renderPurchaseStrip(products, last7Days) {
   `;
 }
 
+function renderOfferProductTable(products, rangePurchases) {
+  if (products.length === 0) return '';
+
+  const firstProductName = productType(products[0]);
+  const totals = {};
+  products.forEach(p => { totals[productType(p)] = 0; });
+
+  rangePurchases.forEach(row => {
+    products.forEach(p => {
+      totals[productType(p)] += parseNum(row[productType(p)] || '0');
+    });
+  });
+
+  const totalTripwire = totals[firstProductName] || 1;
+
+  const rows = products.map((p, i) => {
+    const ptype = productType(p);
+    const pname = productDisplayName(p);
+    const units = totals[ptype] || 0;
+    const isFirst = i === 0;
+    const rate = isFirst ? '' : (totalTripwire > 0 ? ((units / totalTripwire) * 100).toFixed(0) + '%' : '—');
+    return `
+      <tr style="border-top:1px solid var(--ksa-border);">
+        <td style="padding:9px 0 9px 0;">
+          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;">${escapeHtml(ptype)}</div>
+          ${pname ? `<div style="font-family:var(--font-body);font-size:11px;color:var(--ksa-text);opacity:0.45;margin-top:1px;">${escapeHtml(pname)}</div>` : ''}
+        </td>
+        <td style="font-family:var(--font-heading);font-size:20px;font-weight:700;text-align:right;padding:9px 12px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
+        <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:9px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '<span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;">Tripwire</span>' : rate}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <div class="offer-product-table">
+      <div style="font-family:var(--font-label);font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--ksa-orange);margin-bottom:10px;">Products</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;padding-right:12px;font-weight:400;">Units</th>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderCampaignRow(c) {
   const isExpanded = STATE.expandedCampaign === c.name;
   const roasColor = c.roas >= SCALE_THRESHOLD ? 'var(--ksa-green)' :
@@ -2388,7 +2486,8 @@ function toggleCampaignExpand(name, event) {
   if (STATE.expandedCampaign) {
     const data = STATE.cache[STATE.activeClient.slug];
     const groups = groupByCampaign(data.dailyMeta);
-    const rows = groups[name] || [];
+    const { start: rangeStart, end: rangeEnd } = getDateRange();
+    const rows = (groups[name] || []).filter(r => r.date >= rangeStart && r.date <= rangeEnd);
     requestAnimationFrame(() => drawMiniChart(name, rows));
   }
 }
@@ -2583,9 +2682,9 @@ function drawMiniChart(campaignName, rows) {
   if (!canvas) return;
 
   const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
-  const last14 = sorted.slice(-14);
-  const dates = last14.map(r => r.date);
-  const roasData = last14.map(r => r.spend > 0 ? r.purchaseValue / r.spend : 0);
+  if (sorted.length === 0) return;
+  const dates = sorted.map(r => r.date);
+  const roasData = sorted.map(r => r.spend > 0 ? r.purchaseValue / r.spend : 0);
 
   const miniOpts = {
     ySuffix: 'x',
