@@ -462,7 +462,9 @@
       background: var(--ksa-white);
       border: 1.5px solid var(--ksa-border);
       border-radius: 14px;
-      padding: 20px;
+      padding: 16px 20px;
+      max-height: 340px;
+      overflow-y: auto;
     }
 
     .purchase-strip {
@@ -876,6 +878,14 @@ function normalizeDateStr(d) {
   return d;
 }
 
+function formatDisplayDate(d) {
+  const norm = normalizeDateStr(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
+    return parseInt(norm.slice(5, 7), 10) + '/' + parseInt(norm.slice(8, 10), 10);
+  }
+  return d;
+}
+
 function formatChartDate(dateStr) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   if (!dateStr) return '';
@@ -1134,6 +1144,10 @@ function renderOfferView() {
   const offerProfit = offerRevenue - offerSpend;
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
+  const firstProduct = configProducts[0];
+  const totalBuyers = firstProduct ? rangePurchases.reduce((s, r) => s + parseNum(r[productType(firstProduct)] || '0'), 0) : 0;
+  const offerAOV = totalBuyers > 0 ? offerRevenue / totalBuyers : 0;
+  const costPerBuyer = totalBuyers > 0 && offerSpend > 0 ? offerSpend / totalBuyers : 0;
 
   const html = `
     <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
@@ -1162,6 +1176,16 @@ function renderOfferView() {
         <div class="summary-card-eyebrow">Profit</div>
         <div class="summary-card-value" style="color:${offerProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(offerProfit)}</div>
         <div class="summary-card-sub">Revenue − Spend</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">AOV</div>
+        <div class="summary-card-value">${totalBuyers > 0 ? formatCurrency(offerAOV) : '—'}</div>
+        <div class="summary-card-sub">${totalBuyers} buyers</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-eyebrow">Cost Per Buyer</div>
+        <div class="summary-card-value">${costPerBuyer > 0 ? formatCurrency(costPerBuyer) : '—'}</div>
+        <div class="summary-card-sub">Spend ÷ buyers</div>
       </div>
     </div>
 
@@ -1197,35 +1221,50 @@ function renderOfferView() {
 
 function renderOfferProductTable(products, rangePurchases) {
   if (!products || products.length === 0) return '';
-  const sorted = [...products].sort((a, b) => (a.position || 0) - (b.position || 0));
-  const tripwireUnits = (() => {
-    const first = sorted[0];
-    if (!first) return 0;
-    return rangePurchases.reduce((s, r) => s + (parseInt(r[first.name] || r[productDisplayName(first)] || '0', 10) || 0), 0);
-  })();
-  const rows = sorted.map((p, i) => {
+
+  const firstProductName = productType(products[0]);
+  const totals = {};
+  products.forEach(p => { totals[productType(p)] = 0; });
+
+  rangePurchases.forEach(row => {
+    products.forEach(p => {
+      totals[productType(p)] += parseNum(row[productType(p)] || '0');
+    });
+  });
+
+  const totalMain = totals[firstProductName] || 1;
+
+  const rows = products.map((p, i) => {
     const ptype = productType(p);
     const pname = productDisplayName(p);
-    const label = pname ? `${ptype}<br><span style="font-size:10px;opacity:0.55;font-family:var(--font-body);font-weight:400;letter-spacing:0;text-transform:none;">${escapeHtml(pname)}</span>` : escapeHtml(ptype);
-    const units = rangePurchases.reduce((s, r) => s + (parseInt(r[p.name] || r[pname] || '0', 10) || 0), 0);
-    const conv = (i === 0) ? '' : (tripwireUnits > 0 ? Math.round((units / tripwireUnits) * 100) + '%' : '—');
-    return `<tr>
-      <td style="padding:6px 8px 6px 0;font-family:var(--font-label);font-size:11px;letter-spacing:1px;border-bottom:1px solid var(--ksa-border);">${label}</td>
-      <td style="padding:6px 4px;text-align:center;font-size:13px;font-weight:700;border-bottom:1px solid var(--ksa-border);">${units}</td>
-      <td style="padding:6px 0 6px 4px;text-align:center;font-size:12px;opacity:0.65;border-bottom:1px solid var(--ksa-border);">${i === 0 ? 'Tripwire' : conv}</td>
-    </tr>`;
+    const units = totals[ptype] || 0;
+    const isFirst = i === 0;
+    const rate = isFirst ? '' : (totalMain > 0 ? ((units / totalMain) * 100).toFixed(0) + '%' : '—');
+    return `
+      <tr style="border-top:1px solid var(--ksa-border);">
+        <td style="padding:9px 0 9px 0;">
+          <div style="font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--ksa-text);line-height:1.2;">${escapeHtml(ptype)}</div>
+          ${pname ? `<div style="font-family:var(--font-body);font-size:11px;color:var(--ksa-text);opacity:0.45;margin-top:1px;">${escapeHtml(pname)}</div>` : ''}
+        </td>
+        <td style="font-family:var(--font-heading);font-size:20px;font-weight:700;text-align:right;padding:9px 12px;color:var(--ksa-text);vertical-align:middle;">${units}</td>
+        <td style="font-family:var(--font-body);font-size:12px;text-align:right;padding:9px 0;color:var(--ksa-text);opacity:0.55;vertical-align:middle;white-space:nowrap;">${isFirst ? '' : rate}</td>
+      </tr>`;
   }).join('');
-  return `<div class="offer-product-table">
-    <div style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;color:var(--ksa-pink);margin-bottom:12px;">PRODUCT SALES</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <thead><tr>
-        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:left;padding-bottom:8px;opacity:0.5;">PRODUCT</th>
-        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:center;padding-bottom:8px;opacity:0.5;">UNITS</th>
-        <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1px;text-align:center;padding-bottom:8px;opacity:0.5;">CONV.</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
+
+  return `
+    <div class="offer-product-table">
+      <div style="font-family:var(--font-label);font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--ksa-orange);margin-bottom:10px;">Products</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;padding-right:12px;font-weight:400;">Units</th>
+            <th style="font-family:var(--font-label);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderPurchaseStrip(products, last7Days) {
@@ -1260,7 +1299,7 @@ function renderPurchaseStrip(products, last7Days) {
             <div class="purchase-cell-name">${escapeHtml(ptype)}</div>
             ${pname ? `<div class="purchase-cell-subname">${escapeHtml(pname)}</div>` : '<div class="purchase-cell-subname" style="visibility:hidden;">—</div>'}
             <div class="purchase-cell-units">${units}</div>
-            <div class="purchase-cell-rate">${isFirst ? 'Tripwire' : rate + '% conv.'}</div>
+            <div class="purchase-cell-rate">${isFirst ? '' : rate + '% conv.'}</div>
           </div>
         `;
       }).join('')}
@@ -1317,8 +1356,7 @@ function renderPurchaseLog(offerName, configProducts, purchaseData) {
                   const totalUnits = parseNum(row['Total Units'] || '0');
                   const totalRevenue = parseNum(row['Total Revenue'] || '0');
                   const dateVal = row['Date'] || '';
-                  const dateParts = dateVal.split('/');
-                  const displayDate = dateParts.length === 3 ? `${dateParts[0]}/${dateParts[1]}` : dateVal;
+                  const displayDate = formatDisplayDate(dateVal);
 
                   return `<tr>
                     <td>${displayDate}</td>
