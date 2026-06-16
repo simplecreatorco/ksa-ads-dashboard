@@ -639,6 +639,17 @@ function handleSetupNewOffer_(payload) {
     configSheet = createConfigTab_(ss, slug);
   }
 
+  // Migrate header row to current 8-column schema if it was created before Offer Type / Funnel Length were added
+  var currentHeaders = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
+  var requiredHeaders = ['Offer Name', 'Product Type', 'Position', 'Current Price', 'Active', 'Product Name', 'Offer Type', 'Funnel Length'];
+  if (currentHeaders.length < requiredHeaders.length || currentHeaders[6] !== 'Offer Type') {
+    configSheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+    configSheet.getRange(1, 1, 1, requiredHeaders.length).setFontWeight('bold');
+  }
+
+  var offerType = payload.offerType || 'Product Funnel';
+  var funnelLength = Number(payload.funnelLength) || 0;
+
   for (var c = 0; c < products.length; c++) {
     configSheet.appendRow([
       payload.offerName,
@@ -646,7 +657,9 @@ function handleSetupNewOffer_(payload) {
       products[c].position || (c + 1),
       Number(products[c].price) || 0,
       'Yes',
-      products[c].label || ''
+      products[c].label || '',
+      offerType,
+      funnelLength
     ]);
   }
 
@@ -982,7 +995,7 @@ function createConfigTab_(ss, slug) {
   if (existing) return existing;
 
   var sheet = ss.insertSheet(tabName);
-  var headers = ['Offer Name', 'Product Type', 'Position', 'Current Price', 'Active', 'Product Name'];
+  var headers = ['Offer Name', 'Product Type', 'Position', 'Current Price', 'Active', 'Product Name', 'Offer Type', 'Funnel Length'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
 
