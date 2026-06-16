@@ -404,6 +404,9 @@ function doPost(e) {
       case 'delete_purchase':
         result = handleDeletePurchase_(payload);
         break;
+      case 'log_ig_purchase':
+        result = handleLogIGPurchase_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -605,6 +608,13 @@ function handleSetupNewOffer_(payload) {
   const slug = payload.clientSlug;
   if (!slug) return { success: false, error: 'No clientSlug provided' };
 
+  var offerType = payload.offerType || 'Product Funnel';
+
+  // IG Profile Visits has no products — different tab structure
+  if (offerType === 'IG Profile Visits') {
+    return handleSetupIGOffer_(ss, payload);
+  }
+
   var products = payload.products;
   if (!products || products.length === 0) return { success: false, error: 'No products provided' };
 
@@ -647,7 +657,6 @@ function handleSetupNewOffer_(payload) {
     configSheet.getRange(1, 1, 1, requiredHeaders.length).setFontWeight('bold');
   }
 
-  var offerType = payload.offerType || 'Product Funnel';
   var funnelLength = Number(payload.funnelLength) || 0;
 
   for (var c = 0; c < products.length; c++) {
@@ -679,6 +688,66 @@ function handleSetupNewOffer_(payload) {
   }
 
   return { success: true, message: 'Offer created: ' + payload.offerName + ' with ' + products.length + ' products' };
+}
+
+
+/**
+ * handleSetupIGOffer_ — Create IG Profile Purchases tab and add marker row to Config
+ * Called from handleSetupNewOffer_ when offerType === 'IG Profile Visits'
+ */
+function handleSetupIGOffer_(ss, payload) {
+  var slug = payload.clientSlug;
+  var offerName = payload.offerName;
+
+  // Create IG Profile Purchases tab (one per client, shared across all IG campaigns)
+  var igTabName = slug + ' - IG Profile Purchases';
+  var existingTab = ss.getSheetByName(igTabName);
+  if (!existingTab) {
+    var igSheet = ss.insertSheet(igTabName);
+    igSheet.getRange(1, 1, 1, 3).setValues([['Date', 'Description', 'Revenue']]);
+    igSheet.getRange(1, 1, 1, 3).setFontWeight('bold');
+  }
+
+  // Add marker row to Config so the offer appears in the dashboard
+  var configTabName = slug + ' - Config';
+  var configSheet = ss.getSheetByName(configTabName);
+  if (!configSheet) {
+    configSheet = createConfigTab_(ss, slug);
+  }
+
+  var currentHeaders = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
+  var requiredHeaders = ['Offer Name', 'Product Type', 'Position', 'Current Price', 'Active', 'Product Name', 'Offer Type', 'Funnel Length'];
+  if (currentHeaders.length < requiredHeaders.length || currentHeaders[6] !== 'Offer Type') {
+    configSheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+    configSheet.getRange(1, 1, 1, requiredHeaders.length).setFontWeight('bold');
+  }
+
+  configSheet.appendRow([offerName, '', 1, 0, 'Yes', '', 'IG Profile Visits', 0]);
+
+  return { success: true, message: 'IG Profile Visits offer created: ' + offerName };
+}
+
+
+/**
+ * handleLogIGPurchase_ — Append a misc purchase to the IG Profile Purchases tab
+ * Payload: { clientSlug, date, description, revenue }
+ */
+function handleLogIGPurchase_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var igTabName = slug + ' - IG Profile Purchases';
+  var igSheet = ss.getSheetByName(igTabName);
+  if (!igSheet) return { success: false, error: 'IG Profile Purchases tab not found for ' + slug };
+
+  igSheet.appendRow([
+    payload.date || new Date().toISOString().split('T')[0],
+    payload.description || '',
+    Number(payload.revenue) || 0
+  ]);
+
+  return { success: true };
 }
 
 

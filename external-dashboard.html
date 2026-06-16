@@ -821,11 +821,23 @@ async function fetchClientData(slug) {
     }
   });
 
-  // Fetch purchases for each offer
+  // Identify IG Profile Visits offers
+  const igOffers = new Set(
+    config.filter(r => r['Offer Type'] === 'IG Profile Visits').map(r => r['Offer Name'])
+  );
+
+  // Fetch purchases for each offer (skip IG — uses shared tab)
   const purchases = {};
   const purchasePromises = offers.map(async (offerName) => {
+    if (igOffers.has(offerName)) return;
     purchases[offerName] = await fetchSheet(`${slug} - ${offerName} Purchases`);
   });
+
+  let igPurchases = [];
+  if (igOffers.size > 0) {
+    igPurchases = await fetchSheet(`${slug} - IG Profile Purchases`);
+  }
+
   await Promise.all(purchasePromises);
 
   STATE.cache[slug] = {
@@ -833,6 +845,7 @@ async function fetchClientData(slug) {
     config,
     offers,
     purchases,
+    igPurchases,
     lastFetch: new Date()
   };
 
@@ -945,6 +958,10 @@ function filterByDateRange(rows, dateField = 'date') {
 // ============================================================
 // FILTER CAMPAIGNS BY OFFER
 // ============================================================
+
+function getIGCampaigns(dailyMeta) {
+  return dailyMeta.filter(row => /ig.?follow/i.test(row.campaign));
+}
 
 function getCampaignsForOffer(dailyMeta, offerName) {
   const offerLower = offerName.toLowerCase();
@@ -1079,17 +1096,19 @@ function renderOfferCards(data) {
   return data.offers.map(offerName => {
     const offerCfgRow = (data.config || []).find(c => c['Offer Name'] === offerName);
     const offerType = offerCfgRow ? (offerCfgRow['Offer Type'] || 'Product Funnel') : 'Product Funnel';
+    const isIG = offerType === 'IG Profile Visits';
 
-    const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
+    const offerMeta = isIG ? getIGCampaigns(data.dailyMeta) : getCampaignsForOffer(data.dailyMeta, offerName);
     const rangeRows = filterByDateRange(offerMeta);
     const spend = rangeRows.reduce((s, r) => s + r.spend, 0);
 
-    const revenue = (data.purchases[offerName] || [])
-      .filter(r => {
-        const d = normalizeDateStr(r['Date'] || '');
-        return d >= cardRangeStart && d <= cardRangeEnd;
-      })
-      .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+    const revenue = isIG
+      ? (data.igPurchases || [])
+          .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= cardRangeStart && d <= cardRangeEnd; })
+          .reduce((s, r) => s + parseNum(r['Revenue'] || '0'), 0)
+      : (data.purchases[offerName] || [])
+          .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= cardRangeStart && d <= cardRangeEnd; })
+          .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
 
     const roas = spend > 0 ? revenue / spend : 0;
     const profit = revenue - spend;
@@ -1146,65 +1165,37 @@ function renderOfferView() {
   if (!data) return;
 
   const offerName = STATE.activeOffer;
-
-  const offerMeta = getCampaignsForOffer(data.dailyMeta, offerName);
-  const offerRangeRows = filterByDateRange(offerMeta);
-
-  const purchaseData = data.purchases[offerName] || [];
   const configProducts = (data.config || [])
     .filter(c => c['Offer Name'] === offerName && c['Active'] !== 'No')
     .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
 
-  const { start: rangeStart, end: rangeEnd } = getDateRange();
-  const rangePurchases = purchaseData
-    .filter(r => {
-      const normalized = normalizeDateStr(r['Date'] || '');
-      return normalized >= rangeStart && normalized <= rangeEnd;
-    })
-    .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
+  const offerTypeCfg = configProducts[0] ? (configProducts[0]['Offer Type'] || 'Product Funnel') : 'Product Funnel';
+  const isLeadFunnel = offerTypeCfg === 'Lead Funnel';
+  const isIG = offerTypeCfg === 'IG Profile Visits';
 
-  // Offer-level summary stats
+  const offerMeta = isIG ? getIGCampaigns(data.dailyMeta) : getCampaignsForOffer(data.dailyMeta, offerName);
+  const offerRangeRows = filterByDateRange(offerMeta);
   const offerSpend = offerRangeRows.reduce((s, r) => s + r.spend, 0);
-  const offerRevenue = rangePurchases.reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
-  const offerROAS = offerSpend > 0 ? offerRevenue / offerSpend : 0;
-  const offerProfit = offerRevenue - offerSpend;
+
+  const { start: rangeStart, end: rangeEnd } = getDateRange();
   const rangeLabel = STATE.dateRange === '7d' ? 'Last 7 days' :
                      STATE.dateRange === '30d' ? 'Last 30 days' : 'Custom range';
 
-  const offerTypeCfg = configProducts[0] ? (configProducts[0]['Offer Type'] || 'Product Funnel') : 'Product Funnel';
-  const isLeadFunnel = offerTypeCfg === 'Lead Funnel';
-  const funnelLength = isLeadFunnel ? parseInt(configProducts[0]['Funnel Length'] || '0', 10) : 0;
-
-  let funnelStatus = null;
-  if (isLeadFunnel && funnelLength > 0 && configProducts[0]) {
-    const today = new Date();
-    const cutoff = new Date(today);
-    cutoff.setDate(today.getDate() - funnelLength);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const freebieName = productType(configProducts[0]);
-    let inFunnelLeads = 0, completedLeads = 0;
-    purchaseData.forEach(r => {
-      const d = normalizeDateStr(r['Date'] || '');
-      const leads = parseNum(r[freebieName] || '0');
-      if (d >= cutoffStr) inFunnelLeads += leads;
-      else completedLeads += leads;
-    });
-    const allOfferMeta = getCampaignsForOffer(data.dailyMeta, offerName);
-    const completedSpend = allOfferMeta.filter(r => r.date < cutoffStr).reduce((s, r) => s + r.spend, 0);
-    const completedRevenue = purchaseData
-      .filter(r => normalizeDateStr(r['Date'] || '') < cutoffStr)
+  let offerRevenue;
+  if (isIG) {
+    offerRevenue = (data.igPurchases || [])
+      .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= rangeStart && d <= rangeEnd; })
+      .reduce((s, r) => s + parseNum(r['Revenue'] || '0'), 0);
+  } else {
+    offerRevenue = (data.purchases[offerName] || [])
+      .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= rangeStart && d <= rangeEnd; })
       .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
-    const adjROAS = completedSpend > 0 ? completedRevenue / completedSpend : null;
-    funnelStatus = { inFunnelLeads, completedLeads, adjROAS, funnelLength };
   }
 
-  const html = `
-    <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
+  const offerROAS = offerSpend > 0 ? offerRevenue / offerSpend : 0;
+  const offerProfit = offerRevenue - offerSpend;
 
-    <h3 class="section-heading">${escapeHtml(offerName)}</h3>
-
-    ${renderDateBar()}
-
+  const summaryCards = `
     <div class="cards-row">
       <div class="summary-card">
         <div class="summary-card-eyebrow">Ad Spend</div>
@@ -1226,36 +1217,113 @@ function renderOfferView() {
         <div class="summary-card-value" style="color:${offerProfit >= 0 ? 'var(--ksa-green)' : 'var(--ksa-red)'}">${formatCurrency(offerProfit)}</div>
         <div class="summary-card-sub">Revenue − Spend</div>
       </div>
-    </div>
+    </div>`;
 
-    <div class="offer-chart-row">
-      <div class="chart-wrap" style="flex:1;min-width:0;margin-bottom:0;">
-        <div class="chart-header">
-          <div class="chart-title">Offer Performance</div>
-          <div class="chart-toggle">
-            <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
-            <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
-          </div>
-        </div>
-        <div class="chart-canvas-wrap">
-          <canvas id="offer-chart"></canvas>
+  const chartWrap = `
+    <div class="chart-wrap" style="flex:1;min-width:0;margin-bottom:0;">
+      <div class="chart-header">
+        <div class="chart-title">Offer Performance</div>
+        <div class="chart-toggle">
+          <button class="chart-toggle-btn ${STATE.chartMode === 'spend' ? 'active' : ''}" onclick="setOfferChartMode('spend')">Spend & Revenue</button>
+          <button class="chart-toggle-btn ${STATE.chartMode === 'roas' ? 'active' : ''}" onclick="setOfferChartMode('roas')">ROAS</button>
         </div>
       </div>
-      ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus)}
-    </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="offer-chart"></canvas>
+      </div>
+    </div>`;
 
-    ${renderPurchaseLog(offerName, configProducts, purchaseData)}
+  let bottomSection;
+  const purchasesByDate = {};
+
+  if (isIG) {
+    const allIG = (data.igPurchases || [])
+      .slice()
+      .sort((a, b) => normalizeDateStr(b['Date'] || '').localeCompare(normalizeDateStr(a['Date'] || '')));
+    allIG.forEach(r => {
+      const d = normalizeDateStr(r['Date'] || '');
+      if (d) purchasesByDate[d] = (purchasesByDate[d] || 0) + parseNum(r['Revenue'] || '0');
+    });
+    bottomSection = `
+      <div class="offer-chart-row">${chartWrap}</div>
+      ${renderIGPurchaseLog(allIG)}`;
+  } else {
+    const purchaseData = data.purchases[offerName] || [];
+    const rangePurchases = purchaseData
+      .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= rangeStart && d <= rangeEnd; })
+      .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
+
+    const funnelLength = isLeadFunnel ? parseInt(configProducts[0]['Funnel Length'] || '0', 10) : 0;
+    let funnelStatus = null;
+    if (isLeadFunnel && funnelLength > 0 && configProducts[0]) {
+      const today = new Date();
+      const cutoff = new Date(today);
+      cutoff.setDate(today.getDate() - funnelLength);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const freebieName = productType(configProducts[0]);
+      let inFunnelLeads = 0, completedLeads = 0;
+      purchaseData.forEach(r => {
+        const d = normalizeDateStr(r['Date'] || '');
+        const leads = parseNum(r[freebieName] || '0');
+        if (d >= cutoffStr) inFunnelLeads += leads; else completedLeads += leads;
+      });
+      const completedSpend = offerMeta.filter(r => r.date < cutoffStr).reduce((s, r) => s + r.spend, 0);
+      const completedRevenue = purchaseData
+        .filter(r => normalizeDateStr(r['Date'] || '') < cutoffStr)
+        .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
+      const adjROAS = completedSpend > 0 ? completedRevenue / completedSpend : null;
+      funnelStatus = { inFunnelLeads, completedLeads, adjROAS, funnelLength };
+    }
+
+    purchaseData.forEach(r => {
+      const d = normalizeDateStr(r['Date'] || '');
+      if (d) purchasesByDate[d] = (purchasesByDate[d] || 0) + parseNum(r['Total Revenue'] || '0');
+    });
+
+    bottomSection = `
+      <div class="offer-chart-row">
+        ${chartWrap}
+        ${renderOfferProductTable(configProducts, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus)}
+      </div>
+      ${renderPurchaseLog(offerName, configProducts, purchaseData)}`;
+  }
+
+  const html = `
+    <button class="back-btn" onclick="renderAccountOverview()">&#8592; Back to Account Overview</button>
+    <h3 class="section-heading">${escapeHtml(offerName)}</h3>
+    ${renderDateBar()}
+    ${summaryCards}
+    ${bottomSection}
   `;
 
   document.getElementById('main-content').innerHTML = html;
+  requestAnimationFrame(() => drawOfferChart(offerRangeRows, purchasesByDate));
+}
 
-  const offerPurchasesByDate = {};
-  (data.purchases[offerName] || []).forEach(r => {
-    const d = normalizeDateStr(r['Date'] || '');
-    if (d) offerPurchasesByDate[d] = (offerPurchasesByDate[d] || 0) + parseNum(r['Total Revenue'] || '0');
-  });
+function renderIGPurchaseLog(rows) {
+  const tableRows = rows.length === 0
+    ? `<tr><td colspan="3" style="padding:16px 0;font-size:13px;opacity:0.45;text-align:center;">No purchases logged yet.</td></tr>`
+    : rows.map(r => `
+      <tr style="border-top:1px solid var(--ksa-border);">
+        <td style="padding:8px 0;font-family:var(--font-body);font-size:13px;color:var(--ksa-text);opacity:0.7;width:80px;">${formatDisplayDate(r['Date'] || '')}</td>
+        <td style="padding:8px 10px;font-family:var(--font-body);font-size:13px;color:var(--ksa-text);">${escapeHtml(r['Description'] || '')}</td>
+        <td style="padding:8px 0;font-family:var(--font-heading);font-size:15px;font-weight:700;color:var(--ksa-text);text-align:right;">${formatCurrency(parseNum(r['Revenue'] || '0'))}</td>
+      </tr>`).join('');
 
-  requestAnimationFrame(() => drawOfferChart(offerRangeRows, offerPurchasesByDate));
+  return `
+    <div style="background:var(--ksa-white);border:1.5px solid var(--ksa-border);border-radius:14px;padding:20px 24px;margin-top:24px;">
+      <div style="font-family:var(--font-label);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:14px;">Purchase Log</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:8px;font-weight:400;">Date</th>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:8px;font-weight:400;">Description</th>
+            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:8px;font-weight:400;">Revenue</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderOfferProductTable(products, rangePurchases, offerSpend, offerRevenue, isLeadFunnel, funnelStatus) {
