@@ -453,19 +453,34 @@
     .offer-chart-row {
       display: flex;
       gap: 20px;
-      align-items: flex-start;
+      align-items: stretch;
       margin-bottom: 24px;
     }
 
-    .offer-product-table {
+    .offer-product-col {
       width: 270px;
       flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .offer-aov-box {
+      background: var(--ksa-white);
+      border: 1.5px solid var(--ksa-border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      flex-shrink: 0;
+    }
+
+    .offer-product-table {
+      flex: 1;
+      overflow-y: auto;
       background: var(--ksa-white);
       border: 1.5px solid var(--ksa-border);
       border-radius: 14px;
-      padding: 16px 20px;
-      max-height: 320px;
-      overflow-y: auto;
+      padding: 14px 16px;
+      min-height: 0;
     }
 
     .purchase-strip {
@@ -1239,27 +1254,31 @@ function renderOfferProductTable(products, rangePurchases, offerSpend, offerReve
   }).join('');
 
   return `
-    <div class="offer-product-table">
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--ksa-border);">
-        <div>
-          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.4;margin-bottom:2px;">AOV</div>
-          <div style="font-family:var(--font-heading);font-size:20px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.4;margin-bottom:2px;">Cost/Buyer</div>
-          <div style="font-family:var(--font-heading);font-size:20px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
+    <div class="offer-product-col">
+      <div class="offer-aov-box">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">AOV</div>
+            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${aov > 0 ? formatCurrency(aov) : '—'}</div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);margin-bottom:3px;">Cost/Buyer</div>
+            <div style="font-family:var(--font-heading);font-size:22px;font-weight:700;color:var(--ksa-text);">${cpb > 0 ? formatCurrency(cpb) : '—'}</div>
+          </div>
         </div>
       </div>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
-            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;padding-right:10px;font-weight:400;">Units</th>
-            <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-text);opacity:0.35;text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="offer-product-table">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:left;padding-bottom:6px;font-weight:400;">Product</th>
+              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;padding-right:10px;font-weight:400;">Units</th>
+              <th style="font-family:var(--font-label);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ksa-orange);text-align:right;padding-bottom:6px;font-weight:400;">Conv.</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>`;
 }
 
