@@ -1667,17 +1667,26 @@ function daysAgo(n) {
 // Normalize dates like "6/9/2026" or "06/09/2026" to "2026-06-09" for comparison
 function normalizeDateStr(d) {
   if (!d) return '';
+  const s = String(d).trim();
   // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  // M/D/YYYY or MM/DD/YYYY
-  const parts = d.split('/');
-  if (parts.length === 3) {
-    const month = parts[0].padStart(2, '0');
-    const day = parts[1].padStart(2, '0');
-    const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // M/D/YYYY or MM/DD/YYYY (slash-separated)
+  const slashParts = s.split('/');
+  if (slashParts.length === 3) {
+    const month = slashParts[0].padStart(2, '0');
+    const day = slashParts[1].padStart(2, '0');
+    const year = slashParts[2].length === 2 ? '20' + slashParts[2] : slashParts[2];
     return year + '-' + month + '-' + day;
   }
-  return d;
+  // Fallback: let the browser parse it (handles "Jun 14, 2026", "June 14 2026", etc.)
+  const dt = new Date(s + (s.includes(',') || /[a-zA-Z]/.test(s) ? '' : 'T00:00:00'));
+  if (!isNaN(dt.getTime())) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return s;
 }
 
 function formatDisplayDate(d) {
@@ -2815,6 +2824,14 @@ function drawOfferChart(rangeRows, purchasesByDate) {
   rangeRows.forEach(r => {
     if (!byDate[r.date]) byDate[r.date] = { spend: 0 };
     byDate[r.date].spend += r.spend;
+  });
+
+  // Also include dates that have purchases but no spend (e.g. IG purchases logged for today before Meta pull)
+  const { start: chartRangeStart, end: chartRangeEnd } = getDateRange();
+  Object.keys(purchasesByDate || {}).forEach(d => {
+    if (!byDate[d] && d >= chartRangeStart && d <= chartRangeEnd) {
+      byDate[d] = { spend: 0 };
+    }
   });
 
   // Revenue from Purchases tab (source of truth)

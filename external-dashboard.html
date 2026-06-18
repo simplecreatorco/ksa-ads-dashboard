@@ -901,15 +901,23 @@ function daysAgo(n) {
 
 function normalizeDateStr(d) {
   if (!d) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  const parts = d.split('/');
-  if (parts.length === 3) {
-    const month = parts[0].padStart(2, '0');
-    const day = parts[1].padStart(2, '0');
-    const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+  const s = String(d).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const slashParts = s.split('/');
+  if (slashParts.length === 3) {
+    const month = slashParts[0].padStart(2, '0');
+    const day = slashParts[1].padStart(2, '0');
+    const year = slashParts[2].length === 2 ? '20' + slashParts[2] : slashParts[2];
     return year + '-' + month + '-' + day;
   }
-  return d;
+  const dt = new Date(s + (s.includes(',') || /[a-zA-Z]/.test(s) ? '' : 'T00:00:00'));
+  if (!isNaN(dt.getTime())) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return s;
 }
 
 function formatDisplayDate(d) {
@@ -1666,6 +1674,14 @@ function drawOfferChart(rangeRows, purchasesByDate) {
   rangeRows.forEach(r => {
     if (!byDate[r.date]) byDate[r.date] = { spend: 0 };
     byDate[r.date].spend += r.spend;
+  });
+
+  // Include purchase dates in range that have no spend (e.g. IG purchases logged for today)
+  const { start: chartRangeStart, end: chartRangeEnd } = getDateRange();
+  Object.keys(purchasesByDate || {}).forEach(d => {
+    if (!byDate[d] && d >= chartRangeStart && d <= chartRangeEnd) {
+      byDate[d] = { spend: 0 };
+    }
   });
 
   const dates = Object.keys(byDate).sort();
