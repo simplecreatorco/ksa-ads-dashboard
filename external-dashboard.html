@@ -821,24 +821,29 @@ async function fetchClientData(slug) {
     }
   });
 
-  // Identify IG Profile Visits offers
-  const igOffers = new Set(
-    config.filter(r => r['Offer Type'] === 'IG Profile Visits').map(r => r['Offer Name'])
-  );
+  // Detect IG-type offers: explicit Offer Type column (new schema) OR no real products (old schema fallback)
+  function offerHasRealProducts(offerName) {
+    return config.some(r => r['Offer Name'] === offerName &&
+      ((r['Product Type'] !== undefined ? r['Product Type'] : r['Product Name']) || '').trim().length > 0);
+  }
+  function isIGOffer(offerName) {
+    const row = config.find(r => r['Offer Name'] === offerName);
+    if (row && row['Offer Type'] === 'IG Profile Visits') return true;
+    return !offerHasRealProducts(offerName);
+  }
 
-  // Fetch purchases for each offer (skip IG — uses shared tab)
+  // Fetch purchases for each offer; skip IG-type (no per-offer Purchases tab)
   const purchases = {};
   const purchasePromises = offers.map(async (offerName) => {
-    if (igOffers.has(offerName)) return;
+    if (isIGOffer(offerName)) return;
     purchases[offerName] = await fetchSheet(`${slug} - ${offerName} Purchases`);
   });
 
-  let igPurchases = [];
-  if (igOffers.size > 0) {
-    igPurchases = await fetchSheet(`${slug} - IG Profile Purchases`);
-  }
-
-  await Promise.all(purchasePromises);
+  // Always load the IG Profile Purchases tab — returns [] if it doesn't exist
+  const [igPurchases] = await Promise.all([
+    fetchSheet(`${slug} - IG Profile Purchases`),
+    ...purchasePromises.map(p => p || Promise.resolve())
+  ]);
 
   STATE.cache[slug] = {
     dailyMeta: parseDailyMeta(dailyMeta),
@@ -1094,9 +1099,12 @@ function renderOfferCards(data) {
   const { start: cardRangeStart, end: cardRangeEnd } = getDateRange();
 
   return data.offers.map(offerName => {
-    const offerCfgRow = (data.config || []).find(c => c['Offer Name'] === offerName);
+    const offerCfgRows = (data.config || []).filter(c => c['Offer Name'] === offerName);
+    const offerCfgRow = offerCfgRows[0];
     const offerType = offerCfgRow ? (offerCfgRow['Offer Type'] || 'Product Funnel') : 'Product Funnel';
-    const isIG = offerType === 'IG Profile Visits';
+    const hasRealProductsCard = offerCfgRows.some(r => (productType(r) || '').trim().length > 0);
+    const isLeadFunnelCard = offerType === 'Lead Funnel';
+    const isIG = offerType === 'IG Profile Visits' || (!hasRealProductsCard && !isLeadFunnelCard);
 
     const offerMeta = isIG ? getIGCampaigns(data.dailyMeta) : getCampaignsForOffer(data.dailyMeta, offerName);
     const rangeRows = filterByDateRange(offerMeta);
@@ -1171,7 +1179,8 @@ function renderOfferView() {
 
   const offerTypeCfg = configProducts[0] ? (configProducts[0]['Offer Type'] || 'Product Funnel') : 'Product Funnel';
   const isLeadFunnel = offerTypeCfg === 'Lead Funnel';
-  const isIG = offerTypeCfg === 'IG Profile Visits';
+  const hasRealProducts = configProducts.some(p => (productType(p) || '').trim().length > 0);
+  const isIG = offerTypeCfg === 'IG Profile Visits' || (!hasRealProducts && !isLeadFunnel);
 
   const offerMeta = isIG ? getIGCampaigns(data.dailyMeta) : getCampaignsForOffer(data.dailyMeta, offerName);
   const offerRangeRows = filterByDateRange(offerMeta);
