@@ -2097,7 +2097,10 @@ function renderAccountOverview() {
         return d >= rangeStart && d <= rangeEnd;
       })
       .reduce((s, r) => s + parseNum(r['Total Revenue'] || '0'), 0);
-  }, 0);
+  }, 0)
+  + (data.igPurchases || [])
+      .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= rangeStart && d <= rangeEnd; })
+      .reduce((s, r) => s + parseNum(r['Revenue'] || '0'), 0);
 
   const overallROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
   const totalProfit = totalRevenue - totalSpend;
@@ -2218,13 +2221,17 @@ function renderAccountOverview() {
 
   document.getElementById('main-content').innerHTML = html;
 
-  // Build purchases-by-date map (all offers, for main chart revenue line)
+  // Build purchases-by-date map (all offers + IG, for main chart revenue line)
   const mainPurchasesByDate = {};
   Object.values(data.purchases).forEach(offerRows => {
     offerRows.forEach(r => {
       const d = normalizeDateStr(r['Date'] || '');
       if (d) mainPurchasesByDate[d] = (mainPurchasesByDate[d] || 0) + parseNum(r['Total Revenue'] || '0');
     });
+  });
+  (data.igPurchases || []).forEach(r => {
+    const d = normalizeDateStr(r['Date'] || '');
+    if (d) mainPurchasesByDate[d] = (mainPurchasesByDate[d] || 0) + parseNum(r['Revenue'] || '0');
   });
 
   // Draw chart after DOM update
