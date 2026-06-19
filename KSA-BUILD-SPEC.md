@@ -152,7 +152,7 @@ Creates the purchases tab for an offer. Column headers are product names in posi
 
 ---
 
-## Step 3 — Internal Dashboard (internal-dashboard.html)
+## Step 3 — Internal Dashboard (internal/index.html)
 
 Single HTML file. Reads from Google Sheet via Sheets API (published sheet + API key).
 
@@ -352,7 +352,7 @@ Step-by-step for Apps Script setup:
 6. Create time-based trigger: runDailyPull, day timer, between 3am-4am
 7. Deploy as Web App: Execute as Me, Who has access = Anyone
 8. Copy the web app URL
-9. Paste web app URL into internal-dashboard.html WEBAPP_URL constant
+9. Paste web app URL into internal/index.html WEBAPP_URL constant
 10. Re-deploy after any script changes (new deployment URL — update dashboard)
 
 ### github-pages-setup.md
@@ -382,7 +382,7 @@ Step-by-step for creating a Meta System User token:
 ```
 /
 ├── brand-test.html              ← BUILD THIS FIRST
-├── internal-dashboard.html
+├── internal/index.html
 ├── dashboard/index.html
 ├── fonts/
 │   ├── MackinacPro-Bold.woff2   ← Rebecca to provide, or remove dir and use Lora
