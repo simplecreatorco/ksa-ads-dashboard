@@ -4327,7 +4327,7 @@ function openAddIGPurchase(offerName) {
     <div class="modal-label">Description</div>
     <input class="modal-input" id="ig-purchase-desc">
     <div class="modal-label">Revenue</div>
-    <input class="modal-input" id="ig-purchase-revenue" type="number" step="0.01" placeholder="0.00">
+    <input class="modal-input" id="ig-purchase-revenue" type="number" step="0.01" min="0.01" placeholder="0.00">
     <div class="modal-actions">
       <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
       <button class="ksa-btn" onclick="submitIGPurchase('${escapeAttr(offerName)}')">Add Purchase</button>
@@ -4342,6 +4342,7 @@ async function submitIGPurchase(offerName) {
   const description = document.getElementById('ig-purchase-desc').value.trim();
   const revenue = parseFloat(document.getElementById('ig-purchase-revenue').value) || 0;
   if (!date) { showToast('Please enter a date.', true); return; }
+  if (revenue <= 0) { showToast('Please enter a revenue amount.', true); return; }
   closeModal();
   showToast('Saving purchase...');
   const res = await postToWebApp('log_ig_purchase', { clientSlug: slug, date, description, revenue });
