@@ -2818,7 +2818,7 @@ function updatePushButton() {
       : `Data available through ${mostRecent}. Never pushed to clients.`;
   } else {
     btn.className = 'push-live-btn synced';
-    btn.textContent = 'Clients Up to Date';
+    btn.textContent = 'Client Up to Date';
     btn.title = publishedThrough ? `Last pushed through ${publishedThrough}` : '';
   }
 }
@@ -4072,7 +4072,7 @@ function renderIGPurchaseLog(rows, offerName) {
         <td style="padding:8px 10px;font-family:var(--font-body);font-size:13px;color:var(--ksa-text);">${escapeHtml(r['Description'] || '')}</td>
         <td style="padding:8px 0;font-family:var(--font-heading);font-size:15px;font-weight:700;color:var(--ksa-text);text-align:right;">${formatCurrency(parseNum(r['Revenue'] || '0'))}</td>
         <td style="padding:8px 0 8px 12px;text-align:right;">
-          <button onclick="deleteIGPurchase('${escapeAttr(slug)}', ${i})" style="font-size:11px;font-family:var(--font-body);border:none;background:none;color:var(--ksa-text);opacity:0.3;cursor:pointer;padding:2px 4px;" title="Delete">✕</button>
+          <button onclick="confirmDeleteIGPurchase('${escapeAttr(slug)}', ${i})" style="font-size:11px;font-family:var(--font-body);border:none;background:none;color:var(--ksa-text);opacity:0.3;cursor:pointer;padding:2px 4px;" title="Delete">✕</button>
         </td>
       </tr>`).join('');
 
@@ -4355,8 +4355,7 @@ async function submitIGPurchase(offerName) {
   }
 }
 
-async function deleteIGPurchase(slug, rowIndex) {
-  if (!confirm('Delete this purchase?')) return;
+function confirmDeleteIGPurchase(slug, rowIndex) {
   const data = STATE.cache[slug];
   if (!data) return;
   const sorted = [...(data.igPurchases || [])].sort((a, b) =>
@@ -4364,11 +4363,36 @@ async function deleteIGPurchase(slug, rowIndex) {
   );
   const row = sorted[rowIndex];
   if (!row) return;
+  const dateLabel = formatDisplayDate(row['Date'] || '');
+  const descLabel = row['Description'] ? ` &mdash; ${escapeHtml(row['Description'])}` : '';
+  const html = `
+    <div class="modal-title">Delete Purchase</div>
+    <p style="font-size:15px;color:var(--ksa-text);margin:0 0 8px;line-height:1.5;">
+      Delete the <strong>${dateLabel}</strong>${descLabel} entry?
+    </p>
+    <p style="font-size:13px;color:#999;margin:0 0 24px;">This can't be undone.</p>
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" style="background:#e05454;border-color:#e05454;" onclick="executeDeleteIGPurchase('${escapeAttr(slug)}', ${rowIndex})">Delete</button>
+    </div>`;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function executeDeleteIGPurchase(slug, rowIndex) {
+  const data = STATE.cache[slug];
+  if (!data) return;
+  closeModal();
+  const sorted = [...(data.igPurchases || [])].sort((a, b) =>
+    normalizeDateStr(b['Date'] || '').localeCompare(normalizeDateStr(a['Date'] || ''))
+  );
+  const row = sorted[rowIndex];
+  if (!row) return;
   const res = await postToWebApp('delete_ig_purchase', {
     clientSlug: slug,
-    date: row['Date'] || '',
+    date: normalizeDateStr(row['Date'] || ''),
     description: row['Description'] || '',
-    revenue: row['Revenue'] || ''
+    revenue: parseNum(row['Revenue'] || '0')
   });
   if (res && res.success) {
     await fetchClientData(slug);

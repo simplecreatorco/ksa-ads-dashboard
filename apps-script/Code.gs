@@ -776,12 +776,15 @@ function handleDeleteIGPurchase_(payload) {
   var data = igSheet.getDataRange().getValues();
   var targetDate = String(payload.date || '').trim();
   var targetDesc = String(payload.description || '').trim();
-  var targetRev  = Number(payload.revenue) || 0;
+  var targetRev  = parseFloat(String(payload.revenue || '0').replace(/[$,%]/g, '')) || 0;
 
   for (var i = 1; i < data.length; i++) {
-    var rowDate = String(data[i][0] || '').trim();
+    var rawDate = data[i][0];
+    var rowDate = (rawDate instanceof Date)
+      ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : String(rawDate || '').trim();
     var rowDesc = String(data[i][1] || '').trim();
-    var rowRev  = Number(data[i][2]) || 0;
+    var rowRev  = parseFloat(String(data[i][2] || '0').replace(/[$,%]/g, '')) || 0;
     if (rowDate === targetDate && rowDesc === targetDesc && rowRev === targetRev) {
       igSheet.deleteRow(i + 1); // sheet rows are 1-indexed; row 1 is header
       return { success: true };
