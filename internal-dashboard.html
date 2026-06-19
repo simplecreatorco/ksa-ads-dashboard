@@ -2805,7 +2805,7 @@ function updatePushButton() {
   const data = STATE.cache[slug];
   if (!data) { btn.style.display = 'none'; return; }
 
-  btn.style.display = '';
+  btn.style.display = 'inline-block';
   const mostRecent = data.mostRecentDataDate || '';
   const publishedThrough = data.publishState ? (data.publishState['Published Through'] || '') : '';
   const hasNew = mostRecent && mostRecent > publishedThrough;
