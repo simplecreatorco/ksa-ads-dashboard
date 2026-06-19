@@ -2063,7 +2063,7 @@ function renderSidebar() {
     const isActive = STATE.activeClient && STATE.activeClient.slug === c.slug;
     const extBtn = isActive ? `
       <a class="ext-view-btn"
-         href="https://simplecreatorco.github.io/ksa-ads-dashboard/external-dashboard.html?client=${encodeURIComponent(c.slug)}"
+         href="/dashboard?client=${encodeURIComponent(c.slug)}"
          target="_blank"
          onclick="event.stopPropagation()"
          title="Open client external dashboard">Ext</a>
