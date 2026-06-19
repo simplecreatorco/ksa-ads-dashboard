@@ -754,6 +754,8 @@ let STATE = {
   customEnd: null,
   chartMode: 'spend',
   purchaseLogPage: 0,
+  publishedThrough: null,  // date string YYYY-MM-DD — caps all external data
+  publishedAt: null,       // ISO timestamp of last push
 
   // Cached data per client slug
   cache: {}
@@ -805,9 +807,10 @@ async function fetchClientData(slug) {
   const client = STATE.clients.find(c => c.slug === slug);
   if (!client) return;
 
-  const [dailyMeta, config] = await Promise.all([
+  const [dailyMeta, config, publishStateRows] = await Promise.all([
     fetchSheet(`${slug} - Daily Meta`),
-    fetchSheet(`${slug} - Config`)
+    fetchSheet(`${slug} - Config`),
+    fetchSheet('PUBLISH_STATE')
   ]);
 
   // Get unique offers from config
@@ -844,6 +847,10 @@ async function fetchClientData(slug) {
     fetchSheet(`${slug} - IG Profile Purchases`),
     ...purchasePromises.map(p => p || Promise.resolve())
   ]);
+
+  const publishState = publishStateRows.find(r => r['Client Slug'] === slug) || null;
+  STATE.publishedThrough = publishState ? (publishState['Published Through'] || null) : null;
+  STATE.publishedAt = publishState ? (publishState['Published At'] || null) : null;
 
   STATE.cache[slug] = {
     dailyMeta: parseDailyMeta(dailyMeta),
@@ -894,9 +901,9 @@ function dateStr(d) {
 }
 
 function daysAgo(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d;
+  const ref = STATE.publishedThrough ? new Date(STATE.publishedThrough + 'T00:00:00') : new Date();
+  ref.setDate(ref.getDate() - n);
+  return ref;
 }
 
 function normalizeDateStr(d) {
@@ -946,16 +953,18 @@ function formatChartDate(dateStr) {
 // ============================================================
 
 function getDateRange() {
-  const today = new Date();
+  const effectiveToday = STATE.publishedThrough
+    ? new Date(STATE.publishedThrough + 'T00:00:00')
+    : new Date();
   let start, end;
-  end = new Date(today);
+  end = new Date(effectiveToday);
   if (STATE.dateRange === '7d') {
-    start = daysAgo(7);
+    start = daysAgo(6);
   } else if (STATE.dateRange === '30d') {
-    start = daysAgo(30);
+    start = daysAgo(29);
   } else {
-    start = STATE.customStart ? new Date(STATE.customStart) : daysAgo(7);
-    end = STATE.customEnd ? new Date(STATE.customEnd) : today;
+    start = STATE.customStart ? new Date(STATE.customStart) : daysAgo(6);
+    end = STATE.customEnd ? new Date(STATE.customEnd) : effectiveToday;
   }
   return { start: dateStr(start), end: dateStr(end) };
 }
@@ -2039,6 +2048,30 @@ async function init() {
     </div>`;
 
   await fetchClientData(slug);
+
+  if (!STATE.publishedThrough) {
+    document.getElementById('topbar-sync').textContent = '';
+    document.getElementById('main-content').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px;">
+        <div style="font-family:var(--font-label);font-size:52px;color:var(--ksa-pink);letter-spacing:3px;margin-bottom:20px;">COMING SOON</div>
+        <p style="font-family:var(--font-body);font-size:16px;color:var(--ksa-text);max-width:420px;line-height:1.7;margin:0 0 12px;">
+          Your ads dashboard is being prepared. Your team will have it ready for you shortly.
+        </p>
+        <p style="font-family:var(--font-body);font-size:14px;color:#aaa;margin:0;">
+          Questions? Reach out to your KSA team.
+        </p>
+      </div>`;
+    return;
+  }
+
+  // Show last published date in topbar
+  const publishedDate = (() => {
+    if (!STATE.publishedAt) return STATE.publishedThrough || '';
+    const d = new Date(STATE.publishedAt);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
+  document.getElementById('topbar-sync').textContent = `Last updated: ${publishedDate}`;
+
   renderAccountOverview();
 }
 

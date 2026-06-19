@@ -413,6 +413,9 @@ function doPost(e) {
       case 'reorder_offers':
         result = handleReorderOffers_(payload);
         break;
+      case 'push_client_snapshot':
+        result = handlePushClientSnapshot_(payload);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -1308,4 +1311,60 @@ function seedHTPOffers() {
   });
 
   Logger.log('HTP offers seeded');
+}
+
+
+/**
+ * handlePushClientSnapshot_ — Record the most recent data date as "published through"
+ * for a client so the external dashboard caps its view at that date.
+ * Payload: { clientSlug }
+ */
+function handlePushClientSnapshot_(payload) {
+  var ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  // Find most recent date in this client's Daily Meta tab
+  var metaSheet = ss.getSheetByName(slug + ' - Daily Meta');
+  if (!metaSheet) return { success: false, error: 'Daily Meta tab not found for ' + slug };
+
+  var metaData = metaSheet.getDataRange().getValues();
+  var mostRecentDate = '';
+  for (var i = 1; i < metaData.length; i++) {
+    var cell = metaData[i][0];
+    var dateStr = '';
+    if (cell instanceof Date) {
+      dateStr = Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    } else if (cell) {
+      dateStr = String(cell).trim();
+    }
+    if (dateStr && dateStr > mostRecentDate) mostRecentDate = dateStr;
+  }
+
+  if (!mostRecentDate) return { success: false, error: 'No data found in Daily Meta for ' + slug };
+
+  var publishedAt = new Date().toISOString();
+
+  // Upsert into PUBLISH_STATE tab
+  var publishSheet = ss.getSheetByName('PUBLISH_STATE');
+  if (!publishSheet) {
+    publishSheet = ss.insertSheet('PUBLISH_STATE');
+    publishSheet.getRange(1, 1, 1, 3).setValues([['Client Slug', 'Published Through', 'Published At']]);
+    publishSheet.getRange(1, 1, 1, 3).setFontWeight('bold');
+  }
+
+  var publishData = publishSheet.getDataRange().getValues();
+  var found = false;
+  for (var j = 1; j < publishData.length; j++) {
+    if (publishData[j][0] === slug) {
+      publishSheet.getRange(j + 1, 2, 1, 2).setValues([[mostRecentDate, publishedAt]]);
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    publishSheet.appendRow([slug, mostRecentDate, publishedAt]);
+  }
+
+  return { success: true, publishedThrough: mostRecentDate, publishedAt: publishedAt };
 }

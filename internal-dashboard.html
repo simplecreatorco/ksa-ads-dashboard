@@ -147,6 +147,30 @@
     }
     .topbar-settings-btn:hover { background: rgba(255,255,255,0.2); }
 
+    .push-live-btn {
+      font-family: var(--font-label);
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, opacity 0.15s;
+      display: none;
+    }
+    .push-live-btn.has-new {
+      background: var(--ksa-white);
+      color: var(--ksa-pink);
+    }
+    .push-live-btn.has-new:hover { background: #ffe8ee; }
+    .push-live-btn.synced {
+      background: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.45);
+      cursor: default;
+      pointer-events: none;
+    }
+
     /* ============================================
        SIDEBAR
        ============================================ */
@@ -1414,6 +1438,7 @@
     </div>
     <div class="topbar-right">
       <span class="topbar-sync" id="topbar-sync">Last synced: --</span>
+      <button class="push-live-btn" id="push-live-btn" onclick="confirmPushToClients()">Push Live</button>
       <button class="topbar-btn" id="refresh-btn" onclick="refreshData()">Refresh</button>
       <button class="topbar-settings-btn" id="settings-btn" onclick="openSettings()" title="Settings">&#9881;</button>
     </div>
@@ -1558,10 +1583,11 @@ async function fetchClientData(slug) {
   const tabSlug = slug;
 
   // Fetch in parallel
-  const [dailyMeta, config, checkboxState] = await Promise.all([
+  const [dailyMeta, config, checkboxState, publishStateRows] = await Promise.all([
     fetchSheet(`${tabSlug} - Daily Meta`),
     fetchSheet(`${tabSlug} - Config`),
-    fetchSheet('CHECKBOX_STATE')
+    fetchSheet('CHECKBOX_STATE'),
+    fetchSheet('PUBLISH_STATE')
   ]);
 
   // Filter checkbox state for this client and today
@@ -1608,17 +1634,24 @@ async function fetchClientData(slug) {
     ...purchasePromises.map(p => p || Promise.resolve())
   ]);
 
+  const parsedMeta = parseDailyMeta(dailyMeta);
+  const mostRecentDataDate = parsedMeta.map(r => r.date).filter(Boolean).sort().slice(-1)[0] || '';
+  const publishState = publishStateRows.find(r => r['Client Slug'] === slug) || null;
+
   STATE.cache[slug] = {
-    dailyMeta: parseDailyMeta(dailyMeta),
+    dailyMeta: parsedMeta,
     config,
     offers,
     purchases,
     igPurchases,
     checkboxState: myCheckboxes,
+    mostRecentDataDate,
+    publishState,
     lastFetch: new Date()
   };
 
   updateSyncTime();
+  updatePushButton();
 }
 
 // Config row helpers — handle both old schema (Product Name = role)
@@ -2068,6 +2101,8 @@ async function selectClient(slug) {
   const cached = STATE.cache[slug];
   if (!cached || (Date.now() - cached.lastFetch.getTime()) > 300000) {
     await fetchClientData(slug);
+  } else {
+    updatePushButton();
   }
 
   renderAccountOverview();
@@ -2755,6 +2790,79 @@ function updateSyncTime() {
     const t = STATE.cache[slug].lastFetch;
     const timeStr = t.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
     document.getElementById('topbar-sync').textContent = `Last synced: ${timeStr}`;
+  }
+}
+
+// ============================================================
+// PUSH LIVE
+// ============================================================
+
+function updatePushButton() {
+  const btn = document.getElementById('push-live-btn');
+  if (!btn) return;
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  if (!slug) { btn.style.display = 'none'; return; }
+  const data = STATE.cache[slug];
+  if (!data) { btn.style.display = 'none'; return; }
+
+  btn.style.display = '';
+  const mostRecent = data.mostRecentDataDate || '';
+  const publishedThrough = data.publishState ? (data.publishState['Published Through'] || '') : '';
+  const hasNew = mostRecent && mostRecent > publishedThrough;
+
+  if (hasNew) {
+    btn.className = 'push-live-btn has-new';
+    btn.textContent = 'Push Live';
+    btn.title = publishedThrough
+      ? `New data available through ${mostRecent}. Last pushed through ${publishedThrough}.`
+      : `Data available through ${mostRecent}. Never pushed to clients.`;
+  } else {
+    btn.className = 'push-live-btn synced';
+    btn.textContent = 'Clients Up to Date';
+    btn.title = publishedThrough ? `Last pushed through ${publishedThrough}` : '';
+  }
+}
+
+function confirmPushToClients() {
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  if (!slug) return;
+  const data = STATE.cache[slug];
+  if (!data) return;
+  const mostRecent = data.mostRecentDataDate || '';
+  const publishedThrough = data.publishState ? (data.publishState['Published Through'] || '') : '';
+  if (!mostRecent || mostRecent <= publishedThrough) return;
+
+  const clientName = STATE.activeClient.name;
+  const formattedDate = formatDisplayDate(mostRecent);
+
+  const html = `
+    <div class="modal-title">Push Live</div>
+    <p style="font-size:15px;color:var(--ksa-text);margin:0 0 8px;line-height:1.5;">
+      This will update <strong>${escapeHtml(clientName)}'s</strong> external dashboard
+      with all data through <strong>${formattedDate}</strong>.
+    </p>
+    <p style="font-size:13px;color:#999;margin:0 0 24px;">
+      Clients will see this data immediately after you confirm.
+    </p>
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="executePushToClients()">Push Live</button>
+    </div>`;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function executePushToClients() {
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  if (!slug) return;
+  closeModal();
+  showToast('Pushing to clients...');
+  const res = await postToWebApp('push_client_snapshot', { clientSlug: slug });
+  if (res && res.success) {
+    await fetchClientData(slug);
+    showToast('Client dashboard updated.');
+  } else {
+    showToast('Error pushing to clients.', true);
   }
 }
 
