@@ -288,7 +288,7 @@ All saves POST to Apps Script web app endpoint.
 
 ---
 
-## Step 4 — External Dashboard (external-dashboard.html)
+## Step 4 — External Dashboard (dashboard/index.html)
 
 Single HTML file. Reads same Google Sheet. Filters by `?client=slug` URL parameter.
 
@@ -383,7 +383,7 @@ Step-by-step for creating a Meta System User token:
 /
 ├── brand-test.html              ← BUILD THIS FIRST
 ├── internal-dashboard.html
-├── external-dashboard.html
+├── dashboard/index.html
 ├── fonts/
 │   ├── MackinacPro-Bold.woff2   ← Rebecca to provide, or remove dir and use Lora
 │   └── MackinacPro-Book.woff2

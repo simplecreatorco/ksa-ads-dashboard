@@ -14,11 +14,11 @@ Keep scope tight. These are data display dashboards, not full applications.
 
 ## Internal → External Sync Rule
 
-When editing `internal-dashboard.html`, check whether the change affects any section that also exists in `external-dashboard.html`. If it does, **pause and ask Rebecca** before continuing:
+When editing `internal-dashboard.html`, check whether the change affects any section that also exists in `dashboard/index.html`. If it does, **pause and ask Rebecca** before continuing:
 
 > "This change affects [section name], which also exists in the external dashboard. Should I apply it there too?"
 
-If she confirms, apply the equivalent change to `external-dashboard.html` and push both files.
+If she confirms, apply the equivalent change to `dashboard/index.html` and push both files.
 
 **Sections shared between internal and external (always check):**
 - CSS variables and brand styles (`:root`, body, base reset)
@@ -297,7 +297,7 @@ Single HTML file. URL param: `?client=slug`
 2. **Google Sheet setup** — create master sheet, seed with tab structure and sample data
 3. **`apps-script/Code.gs`** — Meta API pull, daily trigger, web app endpoint
 4. **`internal-dashboard.html`** — account overview, then offer view, then settings panel
-5. **`external-dashboard.html`** — fork internal, strip flags, add URL param filter
+5. **`dashboard/index.html`** — fork internal, strip flags, add URL param filter
 6. **Docs** — Apps Script deployment guide, GitHub Pages + subdomain guide, Meta token guide
 7. **`CNAME`** — GitHub Pages subdomain file
 
@@ -309,7 +309,7 @@ Single HTML file. URL param: `?client=slug`
 /
 ├── brand-test.html
 ├── internal-dashboard.html
-├── external-dashboard.html
+├── dashboard/index.html
 ├── fonts/
 │   ├── MackinacPro-Bold.woff2     ← Rebecca to provide, or delete dir and use Lora
 │   └── MackinacPro-Book.woff2
