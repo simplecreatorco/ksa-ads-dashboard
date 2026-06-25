@@ -3567,21 +3567,25 @@ async function saveOfferOrder() {
 async function saveClientSettings() {
   const name = document.getElementById('settings-client-name').value.trim();
   const metaIds = document.getElementById('settings-meta-ids').value.trim();
-  if (!name) { showToast('Client name is required'); return; }
+  if (!name) { showToast('Client name is required', true); return; }
 
   const result = await postToWebApp('save_client', {
     clientSlug: STATE.activeClient.slug,
     clientName: name,
     metaAccountIds: metaIds
-  });
+  }, true); // silent — we show our own toast below
 
-  if (!result) return; // error already shown by postToWebApp
+  if (!result || result.success === false) {
+    showToast('Save failed: ' + (result && result.error ? result.error : 'Unknown error'), true);
+    return;
+  }
 
-  // Update local state
+  // Update local state only after confirmed save
   STATE.activeClient.name = name;
   STATE.activeClient.metaIds = metaIds;
   renderSidebar();
   document.getElementById('topbar-client-name').textContent = name;
+  showToast('Saved — Meta ID: ' + (metaIds || '(none)'));
 }
 
 // ============================================================

@@ -929,18 +929,18 @@ function handleSaveClient_(payload) {
   var metaCol   = headers.indexOf('Meta Account ID(s)');
 
   if (slugCol === -1) return { success: false, error: 'Slug column not found in Clients tab' };
+  if (metaCol === -1) return { success: false, error: 'Meta Account ID(s) column not found in Clients tab — check header name matches exactly' };
 
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][slugCol]).trim() === slug) {
       if (nameCol >= 0 && payload.clientName)
         clientsSheet.getRange(i + 1, nameCol + 1).setValue(payload.clientName);
-      if (metaCol >= 0)
-        clientsSheet.getRange(i + 1, metaCol + 1).setValue(payload.metaAccountIds || '');
+      clientsSheet.getRange(i + 1, metaCol + 1).setValue(payload.metaAccountIds || '');
       return { success: true };
     }
   }
 
-  return { success: false, error: 'Client not found: ' + slug };
+  return { success: false, error: 'Client not found with slug: ' + slug };
 }
 
 
