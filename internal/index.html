@@ -3435,64 +3435,45 @@ function setupProductDragDrop() {
 async function saveProductOrder(offerName) {
   const rows = document.querySelectorAll(`.product-row[data-offer="${offerName}"]`);
   const products = [];
+  let upsellCounter = 0;
+
   rows.forEach((row, i) => {
     const nameEl = row.querySelector('.product-name');
-    const productName = nameEl.dataset.productName || nameEl.textContent.trim();
+    const oldName = nameEl.dataset.productName || nameEl.textContent.trim();
+
+    // Compute the correct type name for this position
+    let newName;
+    if (i === 0) {
+      newName = oldName; // Position 1: always keep existing name (main offer)
+    } else if (i === 1) {
+      newName = 'Bump';
+    } else {
+      upsellCounter++;
+      newName = 'Upsell ' + upsellCounter;
+    }
+
     products.push({
-      name: productName,
+      name: oldName,    // old name — used to find the row in the sheet
+      newName: newName, // new name — Apps Script renames atomically in one call
       position: i + 1,
-      currentPrice: row.querySelector('.product-price').textContent.trim().replace('$', '').replace(',', ''),
+      currentPrice: row.querySelector('.product-price').textContent.trim().replace(/[$,]/g, ''),
       active: 'Yes',
       label: row.dataset.productLabel || ''
     });
   });
 
-  // Save the new position order first (silent — show one toast at end)
   const orderResult = await postToWebApp('save_config', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     products
   }, true);
 
-  if (!orderResult) return; // error already shown
-
-  // Auto-rename products based on new position:
-  // Position 1 = keep existing name (main offer)
-  // Position 2 = "Bump"
-  // Position 3+ = "Upsell 1", "Upsell 2", etc.
-  const renamePromises = [];
-  let upsellCounter = 0;
-  for (let i = 0; i < products.length; i++) {
-    const p = products[i];
-    let expectedName = null;
-
-    if (i === 0) {
-      continue; // Position 1: keep existing name (main offer / tripwire)
-    } else if (i === 1) {
-      expectedName = 'Bump';
-    } else {
-      upsellCounter++;
-      expectedName = 'Upsell ' + upsellCounter;
-    }
-
-    if (expectedName && p.name !== expectedName) {
-      renamePromises.push(
-        postToWebApp('rename_product', {
-          clientSlug: STATE.activeClient.slug,
-          offerName,
-          oldProductName: p.name,
-          newProductName: expectedName
-        }, true) // silent
-      );
-    }
+  if (!orderResult || orderResult.success === false) {
+    showToast('Reorder failed: ' + (orderResult && orderResult.error ? orderResult.error : 'Unknown error'), true);
+    return;
   }
 
-  if (renamePromises.length > 0) {
-    await Promise.all(renamePromises);
-    showToast('Reordered and renamed');
-  } else {
-    showToast('Order saved');
-  }
+  showToast('Order saved');
 
   // Refresh client data
   await fetchClientData(STATE.activeClient.slug);

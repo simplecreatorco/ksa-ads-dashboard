@@ -468,36 +468,50 @@ function handleSaveConfig_(payload) {
   // Get existing data
   var data = configSheet.getDataRange().getValues();
 
-  // For each product in the payload, find and update or append
   for (var p = 0; p < products.length; p++) {
     var product = products[p];
-    var found = false;
+    var oldName = product.name;
+    var newName = product.newName || oldName; // newName present only on reorder
 
     for (var r = 1; r < data.length; r++) {
-      if (data[r][0] === payload.offerName && data[r][1] === product.name) {
-        // Update existing row
+      if (data[r][0] === payload.offerName && data[r][1] === oldName) {
+        configSheet.getRange(r + 1, 2).setValue(newName);              // Product Type (rename)
         configSheet.getRange(r + 1, 3).setValue(product.position);     // Position
         configSheet.getRange(r + 1, 4).setValue(product.currentPrice); // Current Price
         configSheet.getRange(r + 1, 5).setValue(product.active);       // Active
         if (product.label !== undefined) {
           configSheet.getRange(r + 1, 6).setValue(product.label);      // Product Label
         }
-        found = true;
+        // Keep in-memory data in sync so later iterations see updated names
+        data[r][1] = newName;
+
+        // If name changed, propagate to Price History and Purchases tab header
+        if (newName !== oldName) {
+          var priceSheet = ss.getSheetByName('Price History');
+          if (priceSheet) {
+            var priceData = priceSheet.getDataRange().getValues();
+            for (var j = 1; j < priceData.length; j++) {
+              if (String(priceData[j][0]) === slug && priceData[j][1] === payload.offerName && priceData[j][2] === oldName) {
+                priceSheet.getRange(j + 1, 3).setValue(newName);
+              }
+            }
+          }
+          var purchasesTabName = slug + ' - ' + payload.offerName + ' Purchases';
+          var purchasesSheet = ss.getSheetByName(purchasesTabName);
+          if (purchasesSheet) {
+            var phHeaders = purchasesSheet.getRange(1, 1, 1, purchasesSheet.getLastColumn()).getValues()[0];
+            for (var h = 0; h < phHeaders.length; h++) {
+              if (phHeaders[h] === oldName) {
+                purchasesSheet.getRange(1, h + 1).setValue(newName);
+                break;
+              }
+            }
+          }
+        }
         break;
       }
     }
-
-    if (!found) {
-      // Append new row
-      configSheet.appendRow([
-        payload.offerName,
-        product.name,
-        product.position,
-        product.currentPrice,
-        product.active || 'Yes',
-        product.label || ''
-      ]);
-    }
+    // No append on reorder — only existing products are being reordered
   }
 
   return { success: true };
