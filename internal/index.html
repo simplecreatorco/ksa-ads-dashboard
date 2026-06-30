@@ -4427,6 +4427,14 @@ function openLogPurchaseModal(offerName) {
       ${productFields}
     </div>
 
+    <div style="margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="modal-label" style="margin-bottom:0;">Other / One-Off</div>
+        <button class="small-btn small-btn-outline" onclick="addOtherPurchaseRow()">+ Add Item</button>
+      </div>
+      <div id="pe-other-rows"></div>
+    </div>
+
     <div class="pe-modal-totals">
       <div class="pe-modal-total-item">
         <span class="pe-modal-total-label">Total Units</span>
@@ -4448,17 +4456,46 @@ function openLogPurchaseModal(offerName) {
   document.getElementById('modal-overlay').classList.add('show');
 }
 
+function addOtherPurchaseRow() {
+  const container = document.getElementById('pe-other-rows');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 60px 24px;gap:6px;align-items:center;margin-bottom:8px;';
+  row.innerHTML = `
+    <input class="modal-input" placeholder="Item name" style="margin-bottom:0;font-size:13px;" oninput="updatePurchaseModalTotals()">
+    <input class="modal-input" type="number" min="0" step="0.01" placeholder="Price" style="margin-bottom:0;font-size:13px;" oninput="updatePurchaseModalTotals()">
+    <input class="modal-input" type="number" min="0" step="1" value="1" style="margin-bottom:0;font-size:13px;" oninput="updatePurchaseModalTotals()">
+    <button onclick="this.parentElement.remove();updatePurchaseModalTotals();" style="background:none;border:none;cursor:pointer;font-size:16px;opacity:0.4;padding:0;">&#10005;</button>
+  `;
+  container.appendChild(row);
+  row.querySelector('input').focus();
+}
+
 function updatePurchaseModalTotals() {
-  const inputs = document.querySelectorAll('[data-pe-product]');
   let totalUnits = 0;
   let totalRevenue = 0;
 
-  inputs.forEach(input => {
+  // Configured products
+  document.querySelectorAll('[data-pe-product]').forEach(input => {
     const qty = parseInt(input.value) || 0;
     const price = parseFloat(input.dataset.pePrice) || 0;
     totalUnits += qty;
     totalRevenue += qty * price;
   });
+
+  // Other / one-off items
+  const container = document.getElementById('pe-other-rows');
+  if (container) {
+    container.querySelectorAll('div').forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      if (inputs.length >= 3) {
+        const price = parseFloat(inputs[1].value) || 0;
+        const qty = parseInt(inputs[2].value) || 0;
+        totalUnits += qty;
+        totalRevenue += qty * price;
+      }
+    });
+  }
 
   const unitsEl = document.getElementById('pe-total-units');
   const revenueEl = document.getElementById('pe-total-revenue');
@@ -4486,6 +4523,22 @@ async function submitPurchases(offerName) {
     totalUnits += qty;
     totalRevenue += qty * price;
   });
+
+  // Include Other / one-off items in totals
+  const otherContainer = document.getElementById('pe-other-rows');
+  if (otherContainer) {
+    otherContainer.querySelectorAll('div').forEach(row => {
+      const rowInputs = row.querySelectorAll('input');
+      if (rowInputs.length >= 3) {
+        const price = parseFloat(rowInputs[1].value) || 0;
+        const qty = parseInt(rowInputs[2].value) || 0;
+        if (qty > 0 && price > 0) {
+          totalUnits += qty;
+          totalRevenue += qty * price;
+        }
+      }
+    });
+  }
 
   const result = await postToWebApp('save_purchases', {
     clientSlug: STATE.activeClient.slug,
