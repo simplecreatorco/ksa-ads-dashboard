@@ -262,6 +262,18 @@
 
     .sidebar-add:hover { background: var(--ksa-bg); }
 
+    .sidebar-demo {
+      display: block;
+      padding: 10px 20px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: #aaa;
+      text-decoration: none;
+      border-top: 1px solid var(--ksa-border);
+      transition: color 0.15s;
+    }
+    .sidebar-demo:hover { color: var(--ksa-pink); }
+
     /* ============================================
        MAIN CONTENT
        ============================================ */
@@ -1450,6 +1462,7 @@
   <div id="sidebar">
     <div class="sidebar-label">Clients</div>
     <div id="client-list"></div>
+    <a class="sidebar-demo" href="/dashboard?client=demo" target="_blank">View Demo Dashboard</a>
     <div class="sidebar-add" onclick="openAddClient()">+ Add Client</div>
   </div>
 

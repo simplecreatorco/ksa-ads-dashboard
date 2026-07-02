@@ -2008,20 +2008,96 @@ function showError(msg) {
     </div>`;
 }
 
-async function init() {
-  await loadConfig();
-
-  if (!SHEET_ID || !API_KEY) {
-    showError('Dashboard configuration error. Please contact your account manager.');
-    return;
+function buildDemoCache() {
+  const today = new Date();
+  const dates = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i - 1);
+    dates.push(d.toISOString().split('T')[0]);
   }
 
-  // Read client slug from URL query param
+  const miniRoas  = [1.28,1.45,1.38,1.52,1.41,1.60,1.35,1.47,1.58,1.33,1.50,1.55,1.43,1.61,1.37,1.54,1.46,1.62,1.44,1.57,1.49,1.42,1.65,1.48,1.53,1.46,1.59,1.52,1.58,1.63];
+  const miniSpend = [63,65,61,67,64,62,65,66,63,64,65,62,63,66,64,65,63,64,66,63,65,64,62,65,63,66,64,65,63,65];
+  const posingRoas  = [1.22,1.38,1.30,1.44,1.35,1.52,1.28,1.40,1.48,1.27,1.44,1.50,1.37,1.55,1.32,1.47,1.40,1.58,1.38,1.50,1.43,1.36,1.58,1.42,1.48,1.40,1.54,1.46,1.52,1.57];
+  const posingSpend = [38,41,39,40,38,42,39,40,41,38,40,39,41,40,38,41,40,39,41,38,40,39,42,40,39,41,40,38,41,40];
+  const igSpend   = [16,18,15,17,16,19,15,17,18,16,17,15,18,16,17,15,18,16,17,18,16,17,15,18,16,17,15,18,16,17];
+
+  const dailyMeta = [];
+  const miniPurchases = [];
+  const posingPurchases = [];
+
+  dates.forEach((date, i) => {
+    const ms = miniSpend[i], mr = Math.round(ms * miniRoas[i]);
+    const ps = posingSpend[i], pr = Math.round(ps * posingRoas[i]);
+    const igs = igSpend[i];
+
+    dailyMeta.push(
+      { date, campaign: 'KSA Mini Session Offer - $65/day', spend: ms, impressions: 2800+ms*20, reach: 2400+ms*15, clicks: 85+Math.floor(ms*0.8), leads: 12, purchases: Math.round(mr/47), purchaseValue: mr, cpm: 22+(i%5)*0.8, cpc: 0.72+(i%4)*0.05, ctr: 2.8+(i%6)*0.2, roas: miniRoas[i] },
+      { date, campaign: 'KSA Posing Guide - $40/day', spend: ps, impressions: 1600+ps*20, reach: 1400+ps*15, clicks: 50+Math.floor(ps*0.8), leads: 7, purchases: Math.round(pr/37), purchaseValue: pr, cpm: 24+(i%5)*0.7, cpc: 0.78+(i%4)*0.05, ctr: 2.6+(i%6)*0.2, roas: posingRoas[i] },
+      { date, campaign: 'KSA IG Follow - $17/day', spend: igs, impressions: 4200+igs*50, reach: 3800+igs*40, clicks: 95+igs*3, leads: 0, purchases: 0, purchaseValue: 0, cpm: 4+(i%5)*0.3, cpc: 0.18+(i%4)*0.02, ctr: 2.1+(i%6)*0.1, roas: 0 }
+    );
+
+    const mMain = Math.max(1, Math.floor(mr / 65)), mBump = i%3===0?1:0, mU1 = i%7===4?1:0, mU2 = i%11===8?1:0;
+    miniPurchases.push({ 'Date': date, 'Main Offer': mMain, 'Bump': mBump, 'Upsell 1': mU1, 'Upsell 2': mU2, 'Total Units': mMain+mBump+mU1+mU2, 'Total Revenue': mr });
+
+    const pMain = Math.max(1, Math.floor(pr / 50)), pBump = i%4===1?1:0, pU1 = i%9===5?1:0;
+    posingPurchases.push({ 'Date': date, 'Main Offer': pMain, 'Bump': pBump, 'Upsell 1': pU1, 'Total Units': pMain+pBump+pU1, 'Total Revenue': pr });
+  });
+
+  const igEntries = [[2,'Strategy Session',97],[5,'Style Guide',47],[8,'Strategy Session',97],[11,'Style Guide',47],[14,'Strategy Session',97],[17,'Style Guide',47],[20,'Strategy Session',97],[23,'Style Guide',47],[26,'Strategy Session',97],[29,'Style Guide',47]];
+  const igPurchases = igEntries.map(([idx, desc, rev]) => ({ 'Date': dates[idx], 'Description': desc, 'Revenue': rev }));
+
+  return {
+    dailyMeta,
+    config: [
+      {'Offer Name':'IG Profile Visits','Product Type':'','Position':'','Current Price':'','Active':'Yes','Product Name':'','Offer Type':'IG Profile Visits'},
+      {'Offer Name':'Mini Session Offer','Product Type':'Main Offer','Position':1,'Current Price':47,'Active':'Yes','Product Name':'Mini Session','Offer Type':''},
+      {'Offer Name':'Mini Session Offer','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Prep Checklist','Offer Type':''},
+      {'Offer Name':'Mini Session Offer','Product Type':'Upsell 1','Position':3,'Current Price':97,'Active':'Yes','Product Name':'Full Session Upgrade','Offer Type':''},
+      {'Offer Name':'Mini Session Offer','Product Type':'Upsell 2','Position':4,'Current Price':27,'Active':'Yes','Product Name':'Print Package','Offer Type':''},
+      {'Offer Name':'Posing Guide','Product Type':'Main Offer','Position':1,'Current Price':37,'Active':'Yes','Product Name':'Client Posing Guide','Offer Type':''},
+      {'Offer Name':'Posing Guide','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Posing Cards','Offer Type':''},
+      {'Offer Name':'Posing Guide','Product Type':'Upsell 1','Position':3,'Current Price':57,'Active':'Yes','Product Name':'Video Training','Offer Type':''},
+    ],
+    offers: ['IG Profile Visits', 'Mini Session Offer', 'Posing Guide'],
+    purchases: { 'Mini Session Offer': miniPurchases, 'Posing Guide': posingPurchases },
+    igPurchases,
+    lastFetch: new Date()
+  };
+}
+
+async function init() {
+  // Read slug first so demo mode can bypass sheet fetches entirely
   const params = new URLSearchParams(window.location.search);
   const slug = params.get('client');
 
   if (!slug) {
     showError('Dashboard not available. Please use the link provided by your account manager.');
+    return;
+  }
+
+  // Demo mode — no sheet fetches needed
+  if (slug === 'demo') {
+    const demoClient = { name: 'Your Photography Studio', slug: 'demo' };
+    STATE.clients = [demoClient];
+    STATE.activeClient = demoClient;
+    STATE.cache['demo'] = buildDemoCache();
+    const todayStr = new Date().toISOString().split('T')[0];
+    STATE.publishedThrough = todayStr;
+    STATE.publishedAt = todayStr;
+    document.getElementById('topbar-client-name').textContent = demoClient.name;
+    document.getElementById('topbar-client-divider').style.display = '';
+    document.title = `${demoClient.name} — Performance Dashboard`;
+    document.getElementById('topbar-sync').textContent = 'Last updated: ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    renderAccountOverview();
+    return;
+  }
+
+  await loadConfig();
+
+  if (!SHEET_ID || !API_KEY) {
+    showError('Dashboard configuration error. Please contact your account manager.');
     return;
   }
 
