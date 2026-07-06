@@ -4211,6 +4211,15 @@ function openEditPurchase(offerName, rawDate) {
     <div class="modal-title">Edit Purchase Entry</div>
     <p style="font-family:var(--font-body);font-size:13px;margin:0 0 16px;opacity:0.5;">${escapeHtml(offerName)} &middot; ${displayDate}</p>
     ${productFields}
+
+    <div style="margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="modal-label" style="margin-bottom:0;">Other / One-Off</div>
+        <button class="small-btn small-btn-outline" onclick="addOtherPurchaseRow()">+ Add Item</button>
+      </div>
+      <div id="pe-other-rows"></div>
+    </div>
+
     <div style="display:flex;gap:24px;padding:10px 0 16px;border-top:1px solid var(--ksa-border);margin-top:6px;font-family:var(--font-body);font-size:13px;">
       <div>Units: <strong id="pe-total-units">0</strong></div>
       <div>Est. Revenue: <strong id="pe-total-revenue">$0</strong></div>
@@ -4240,6 +4249,22 @@ async function submitEditPurchase(offerName, rawDate) {
     totalUnits += qty;
     totalRevenue += qty * price;
   });
+
+  // Include Other / one-off items in totals
+  const otherContainer = document.getElementById('pe-other-rows');
+  if (otherContainer) {
+    otherContainer.querySelectorAll('div').forEach(row => {
+      const rowInputs = row.querySelectorAll('input');
+      if (rowInputs.length >= 3) {
+        const price = parseFloat(rowInputs[1].value) || 0;
+        const qty = Math.max(1, parseInt(rowInputs[2].value) || 1);
+        if (price > 0) {
+          totalUnits += qty;
+          totalRevenue += qty * price;
+        }
+      }
+    });
+  }
 
   // Send the normalized date so Apps Script can match it
   const normalizedDate = normalizeDateStr(rawDate) || rawDate;
@@ -4544,8 +4569,8 @@ async function submitPurchases(offerName) {
       const rowInputs = row.querySelectorAll('input');
       if (rowInputs.length >= 3) {
         const price = parseFloat(rowInputs[1].value) || 0;
-        const qty = parseInt(rowInputs[2].value) || 0;
-        if (qty > 0 && price > 0) {
+        const qty = Math.max(1, parseInt(rowInputs[2].value) || 1);
+        if (price > 0) {
           totalUnits += qty;
           totalRevenue += qty * price;
         }
