@@ -416,6 +416,9 @@ function doPost(e) {
       case 'add_product':
         result = handleAddProduct_(payload);
         break;
+      case 'set_client_status':
+        result = handleSetClientStatus_(payload);
+        break;
       case 'push_client_snapshot':
         result = handlePushClientSnapshot_(payload);
         break;
@@ -1041,6 +1044,42 @@ function handleSaveClient_(payload) {
     }
   }
 
+  return { success: false, error: 'Client not found with slug: ' + slug };
+}
+
+
+/**
+ * set_client_status — Archive or reactivate a client via the Status column.
+ * Archived clients are skipped by the daily pull and hidden from both dashboards;
+ * all their tabs and data stay untouched, so reactivating restores everything.
+ * Payload: { clientSlug, status: 'Active' | 'Archived' }
+ */
+function handleSetClientStatus_(payload) {
+  const ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+
+  var status = payload.status;
+  if (status !== 'Active' && status !== 'Archived') {
+    return { success: false, error: 'Status must be Active or Archived' };
+  }
+
+  var clientsSheet = ss.getSheetByName('Clients');
+  if (!clientsSheet) return { success: false, error: 'Clients tab not found' };
+
+  var data = clientsSheet.getDataRange().getValues();
+  var headers = data[0];
+  var slugCol = headers.indexOf('Slug');
+  var statusCol = headers.indexOf('Status');
+  if (slugCol === -1) return { success: false, error: 'Slug column not found in Clients tab' };
+  if (statusCol === -1) return { success: false, error: 'Status column not found in Clients tab' };
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][slugCol]).trim() === slug) {
+      clientsSheet.getRange(i + 1, statusCol + 1).setValue(status);
+      return { success: true, message: slug + ' set to ' + status };
+    }
+  }
   return { success: false, error: 'Client not found with slug: ' + slug };
 }
 

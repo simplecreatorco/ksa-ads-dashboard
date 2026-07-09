@@ -261,6 +261,22 @@
 
     .sidebar-add:hover { background: var(--ksa-bg); }
 
+    .sidebar-archived-toggle {
+      padding: 12px 20px 8px;
+      font-family: var(--font-label);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #bbb;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    .sidebar-archived-toggle:hover { color: var(--ksa-pink); }
+
+    .sidebar-client-archived { cursor: default; }
+    .sidebar-client-archived:hover { background: transparent; }
+
     .sidebar-demo {
       display: block;
       margin-top: auto;
@@ -1578,13 +1594,15 @@ async function fetchSheet(tabName) {
 
 async function fetchClients() {
   const rows = await fetchSheet('Clients');
-  STATE.clients = rows.filter(r => r['Status'] === 'Active').map(r => ({
+  const all = rows.map(r => ({
     name: r['Client Name'] || '',
     slug: r['Slug'] || '',
     metaIds: r['Meta Account ID(s)'] || '',
     status: r['Status'] || '',
     notes: r['Notes'] || ''
   }));
+  STATE.clients = all.filter(c => c.status === 'Active');
+  STATE.archivedClients = all.filter(c => c.status === 'Archived');
   renderSidebar();
 }
 
@@ -2073,7 +2091,7 @@ function getCampaignsForOffer(dailyMeta, offerName) {
 
 function renderSidebar() {
   const container = document.getElementById('client-list');
-  container.innerHTML = STATE.clients.map(c => {
+  let html = STATE.clients.map(c => {
     const isActive = STATE.activeClient && STATE.activeClient.slug === c.slug;
     const extBtn = isActive ? `
       <a class="ext-view-btn"
@@ -2089,6 +2107,34 @@ function renderSidebar() {
       </div>
     `;
   }).join('');
+
+  const archived = STATE.archivedClients || [];
+  if (archived.length > 0) {
+    html += `
+      <div class="sidebar-archived-toggle" onclick="STATE.showArchived = !STATE.showArchived; renderSidebar();">
+        Archived (${archived.length}) <span>${STATE.showArchived ? '&#9662;' : '&#9656;'}</span>
+      </div>`;
+    if (STATE.showArchived) {
+      html += archived.map(c => `
+        <div class="sidebar-client sidebar-client-archived">
+          <span class="sidebar-client-name" style="opacity:0.45;">${escapeHtml(c.name)}</span>
+          <button class="ext-view-btn" onclick="reactivateClient('${escapeAttr(c.slug)}')" title="Move back to active clients">Restore</button>
+        </div>
+      `).join('');
+    }
+  }
+
+  container.innerHTML = html;
+}
+
+async function reactivateClient(slug) {
+  const result = await postToWebApp('set_client_status', { clientSlug: slug, status: 'Active' }, true);
+  if (!result || result.success === false) {
+    showToast('Reactivate failed: ' + (result && result.error ? result.error : 'Unknown error'), true);
+    return;
+  }
+  showToast('Client reactivated');
+  await fetchClients();
 }
 
 async function selectClient(slug) {
@@ -3340,7 +3386,10 @@ function openSettings() {
       <div class="settings-label">Meta Account ID</div>
       <input class="settings-input" id="settings-meta-ids" value="${escapeAttr(client.metaIds)}">
 
-      <button class="ksa-btn" onclick="saveClientSettings()" style="margin-top:4px;">Save Client</button>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:4px;">
+        <button class="ksa-btn" onclick="saveClientSettings()">Save Client</button>
+        <button class="ksa-btn-outline" onclick="confirmArchiveClient()" style="color:#b3552e;border-color:#d9a08a;">Archive Client</button>
+      </div>
     </div>
 
     <div class="settings-section">
@@ -3581,6 +3630,55 @@ async function saveClientSettings() {
   renderSidebar();
   document.getElementById('topbar-client-name').textContent = name;
   showToast('Saved — Meta ID: ' + (metaIds || '(none)'));
+}
+
+function confirmArchiveClient() {
+  const client = STATE.activeClient;
+  if (!client) return;
+
+  const html = `
+    <div class="modal-title">Archive ${escapeHtml(client.name)}?</div>
+    <p style="font-family:var(--font-body);font-size:14px;line-height:1.7;margin:0 0 8px;">
+      This stops the daily Meta pull and hides their external dashboard link.
+      All of their data, offers, and history stay in the spreadsheet untouched.
+    </p>
+    <p style="font-family:var(--font-body);font-size:14px;line-height:1.7;margin:0 0 16px;opacity:0.6;">
+      You can restore them anytime from the Archived section at the bottom of the client list.
+    </p>
+    <div class="modal-actions">
+      <button class="ksa-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="ksa-btn" onclick="archiveClient('${escapeAttr(client.slug)}')">Archive Client</button>
+    </div>
+  `;
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function archiveClient(slug) {
+  const result = await postToWebApp('set_client_status', { clientSlug: slug, status: 'Archived' }, true);
+  if (!result || result.success === false) {
+    showToast('Archive failed: ' + (result && result.error ? result.error : 'Unknown error'), true);
+    return;
+  }
+
+  closeModal();
+  closeSettings();
+  showToast('Client archived');
+
+  await fetchClients();
+
+  // If the archived client was active, switch to the first remaining client
+  if (STATE.activeClient && STATE.activeClient.slug === slug) {
+    STATE.activeClient = null;
+    STATE.activeOffer = null;
+    if (STATE.clients.length > 0) {
+      selectClient(STATE.clients[0].slug);
+    } else {
+      document.getElementById('topbar-client-name').textContent = '';
+      document.getElementById('main-content').innerHTML = '<div class="empty-state">No active clients. Add one from the sidebar.</div>';
+      renderSidebar();
+    }
+  }
 }
 
 // ============================================================
