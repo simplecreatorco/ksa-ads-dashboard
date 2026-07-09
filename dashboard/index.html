@@ -2046,8 +2046,8 @@ function buildDemoCache() {
     const igs = igSpend[i];
 
     dailyMeta.push(
-      { date, campaign: 'KSA Mini Session Offer - $65/day', spend: ms, impressions: 2800+ms*20, reach: 2400+ms*15, clicks: 85+Math.floor(ms*0.8), leads: 12, purchases: Math.round(mr/47), purchaseValue: mr, cpm: 22+(i%5)*0.8, cpc: 0.72+(i%4)*0.05, ctr: 2.8+(i%6)*0.2, roas: miniRoas[i] },
-      { date, campaign: 'KSA Posing Guide - $40/day', spend: ps, impressions: 1600+ps*20, reach: 1400+ps*15, clicks: 50+Math.floor(ps*0.8), leads: 7, purchases: Math.round(pr/37), purchaseValue: pr, cpm: 24+(i%5)*0.7, cpc: 0.78+(i%4)*0.05, ctr: 2.6+(i%6)*0.2, roas: posingRoas[i] },
+      { date, campaign: 'KSA Tiny Offer Funnel - $65/day', spend: ms, impressions: 2800+ms*20, reach: 2400+ms*15, clicks: 85+Math.floor(ms*0.8), leads: 12, purchases: Math.round(mr/47), purchaseValue: mr, cpm: 22+(i%5)*0.8, cpc: 0.72+(i%4)*0.05, ctr: 2.8+(i%6)*0.2, roas: miniRoas[i] },
+      { date, campaign: 'KSA Content Planner - $40/day', spend: ps, impressions: 1600+ps*20, reach: 1400+ps*15, clicks: 50+Math.floor(ps*0.8), leads: 7, purchases: Math.round(pr/37), purchaseValue: pr, cpm: 24+(i%5)*0.7, cpc: 0.78+(i%4)*0.05, ctr: 2.6+(i%6)*0.2, roas: posingRoas[i] },
       { date, campaign: 'KSA IG Follow - $17/day', spend: igs, impressions: 4200+igs*50, reach: 3800+igs*40, clicks: 95+igs*3, leads: 0, purchases: 0, purchaseValue: 0, cpm: 4+(i%5)*0.3, cpc: 0.18+(i%4)*0.02, ctr: 2.1+(i%6)*0.1, roas: 0 }
     );
 
@@ -2058,23 +2058,23 @@ function buildDemoCache() {
     posingPurchases.push({ 'Date': date, 'Main Offer': pMain, 'Bump': pBump, 'Upsell 1': pU1, 'Total Units': pMain+pBump+pU1, 'Total Revenue': pr });
   });
 
-  const igEntries = [[2,'Strategy Session',97],[5,'Style Guide',47],[8,'Strategy Session',97],[11,'Style Guide',47],[14,'Strategy Session',97],[17,'Style Guide',47],[20,'Strategy Session',97],[23,'Style Guide',47],[26,'Strategy Session',97],[29,'Style Guide',47]];
+  const igEntries = [[2,'Strategy Session',97],[5,'Mini Course',47],[8,'Strategy Session',97],[11,'Mini Course',47],[14,'Strategy Session',97],[17,'Mini Course',47],[20,'Strategy Session',97],[23,'Mini Course',47],[26,'Strategy Session',97],[29,'Mini Course',47]];
   const igPurchases = igEntries.map(([idx, desc, rev]) => ({ 'Date': dates[idx], 'Description': desc, 'Revenue': rev }));
 
   return {
     dailyMeta,
     config: [
       {'Offer Name':'IG Profile Visits','Product Type':'','Position':'','Current Price':'','Active':'Yes','Product Name':'','Offer Type':'IG Profile Visits'},
-      {'Offer Name':'Mini Session Offer','Product Type':'Main Offer','Position':1,'Current Price':47,'Active':'Yes','Product Name':'Mini Session','Offer Type':''},
-      {'Offer Name':'Mini Session Offer','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Prep Checklist','Offer Type':''},
-      {'Offer Name':'Mini Session Offer','Product Type':'Upsell 1','Position':3,'Current Price':97,'Active':'Yes','Product Name':'Full Session Upgrade','Offer Type':''},
-      {'Offer Name':'Mini Session Offer','Product Type':'Upsell 2','Position':4,'Current Price':27,'Active':'Yes','Product Name':'Print Package','Offer Type':''},
-      {'Offer Name':'Posing Guide','Product Type':'Main Offer','Position':1,'Current Price':37,'Active':'Yes','Product Name':'Client Posing Guide','Offer Type':''},
-      {'Offer Name':'Posing Guide','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Posing Cards','Offer Type':''},
-      {'Offer Name':'Posing Guide','Product Type':'Upsell 1','Position':3,'Current Price':57,'Active':'Yes','Product Name':'Video Training','Offer Type':''},
+      {'Offer Name':'Tiny Offer Funnel','Product Type':'Main Offer','Position':1,'Current Price':47,'Active':'Yes','Product Name':'Starter Kit','Offer Type':''},
+      {'Offer Name':'Tiny Offer Funnel','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Quick-Start Checklist','Offer Type':''},
+      {'Offer Name':'Tiny Offer Funnel','Product Type':'Upsell 1','Position':3,'Current Price':97,'Active':'Yes','Product Name':'Complete Course','Offer Type':''},
+      {'Offer Name':'Tiny Offer Funnel','Product Type':'Upsell 2','Position':4,'Current Price':27,'Active':'Yes','Product Name':'Template Pack','Offer Type':''},
+      {'Offer Name':'Content Planner','Product Type':'Main Offer','Position':1,'Current Price':37,'Active':'Yes','Product Name':'Content Planner','Offer Type':''},
+      {'Offer Name':'Content Planner','Product Type':'Bump','Position':2,'Current Price':17,'Active':'Yes','Product Name':'Caption Templates','Offer Type':''},
+      {'Offer Name':'Content Planner','Product Type':'Upsell 1','Position':3,'Current Price':57,'Active':'Yes','Product Name':'Video Training','Offer Type':''},
     ],
-    offers: ['IG Profile Visits', 'Mini Session Offer', 'Posing Guide'],
-    purchases: { 'Mini Session Offer': miniPurchases, 'Posing Guide': posingPurchases },
+    offers: ['IG Profile Visits', 'Tiny Offer Funnel', 'Content Planner'],
+    purchases: { 'Tiny Offer Funnel': miniPurchases, 'Content Planner': posingPurchases },
     igPurchases,
     lastFetch: new Date()
   };
@@ -2092,7 +2092,7 @@ async function init() {
 
   // Demo mode — no sheet fetches needed
   if (slug === 'demo') {
-    const demoClient = { name: 'Your Photography Studio', slug: 'demo' };
+    const demoClient = { name: 'Your Business', slug: 'demo' };
     STATE.clients = [demoClient];
     STATE.activeClient = demoClient;
     STATE.cache['demo'] = buildDemoCache();
