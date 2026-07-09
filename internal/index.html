@@ -1720,7 +1720,11 @@ function parseNum(v) {
 }
 
 function dateStr(d) {
-  return d.toISOString().split('T')[0];
+  // Local date, not UTC — toISOString would roll to tomorrow after ~7pm Central
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function daysAgo(n) {
@@ -1792,7 +1796,7 @@ async function postToWebApp(action, payload, silent = false) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action, secret: WEBAPP_SECRET, ...payload })
+      body: JSON.stringify({ ...payload, action, secret: WEBAPP_SECRET })
     });
     const result = await res.json();
     if (result.error) {
@@ -1814,7 +1818,7 @@ async function saveCheckbox(campaignName, action, checked) {
   await postToWebApp('save_checkbox_state', {
     clientSlug: STATE.activeClient.slug,
     campaignName,
-    action,
+    campaignAction: action,
     checked,
     date: dateStr(new Date())
   });
@@ -2101,8 +2105,8 @@ function renderSidebar() {
          title="Open client external dashboard">Ext</a>
     ` : '';
     return `
-      <div class="sidebar-client ${isActive ? 'active' : ''}" onclick="selectClient('${c.slug}')">
-        <span class="sidebar-client-name">${c.name}</span>
+      <div class="sidebar-client ${isActive ? 'active' : ''}" onclick="selectClient('${escapeAttr(c.slug)}')">
+        <span class="sidebar-client-name">${escapeHtml(c.name)}</span>
         ${extBtn}
       </div>
     `;
@@ -2867,7 +2871,7 @@ function updatePushButton() {
 
   btn.style.display = 'inline-block';
   const mostRecent = data.mostRecentDataDate || '';
-  const publishedThrough = data.publishState ? (data.publishState['Published Through'] || '') : '';
+  const publishedThrough = data.publishState ? (normalizeDateStr(data.publishState['Published Through']) || '') : '';
   const hasNew = mostRecent && mostRecent > publishedThrough;
 
   if (hasNew) {
@@ -2889,7 +2893,7 @@ function confirmPushToClients() {
   const data = STATE.cache[slug];
   if (!data) return;
   const mostRecent = data.mostRecentDataDate || '';
-  const publishedThrough = data.publishState ? (data.publishState['Published Through'] || '') : '';
+  const publishedThrough = data.publishState ? (normalizeDateStr(data.publishState['Published Through']) || '') : '';
   if (!mostRecent || mostRecent <= publishedThrough) return;
 
   const clientName = STATE.activeClient.name;
@@ -3419,7 +3423,7 @@ function openSettings() {
               const pname = productDisplayName(p);
               const displayName = pname ? `${escapeHtml(ptype)} <span style="opacity:0.5;font-weight:400;">— ${escapeHtml(pname)}</span>` : escapeHtml(ptype);
               return `
-              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}" data-product-label="${escapeAttr(pname)}">
+              <div class="product-row" data-offer="${escapeAttr(offerName)}" data-position="${idx}" data-product-label="${escapeAttr(pname)}" data-price="${parseNum(p['Current Price'])}" data-active="${escapeAttr(p['Active'] || 'Yes')}">
                 <span class="product-drag" title="Drag to reorder">&#9776;</span>
                 <span class="product-name" data-product-name="${escapeAttr(ptype)}">${displayName}</span>
                 <span class="product-price">${formatCurrency(parseNum(p['Current Price']))}</span>
@@ -3496,34 +3500,50 @@ function setupProductDragDrop() {
 }
 
 async function saveProductOrder(offerName) {
-  const rows = document.querySelectorAll(`.product-row[data-offer="${offerName}"]`);
+  const allRows = Array.from(document.querySelectorAll('.product-row'));
+  const rows = allRows.filter(r => r.dataset.offer === offerName);
   const products = [];
+
+  // Auto-renaming (pos 2 = Bump, pos 3+ = Upsell N) only makes sense for
+  // standard funnels. Lead funnels (Main at pos 2) and offers without a Bump
+  // would get their names destroyed — for those, reorder positions only.
+  const oldNames = rows.map(r => {
+    const nameEl = r.querySelector('.product-name');
+    return nameEl.dataset.productName || nameEl.textContent.trim();
+  });
+  const isStandardPattern = oldNames.every((n, i) => {
+    if (i === 0) return true;
+    return n === 'Bump' || /^Upsell \d+$/.test(n);
+  });
+
   let upsellCounter = 0;
-
   rows.forEach((row, i) => {
-    const nameEl = row.querySelector('.product-name');
-    const oldName = nameEl.dataset.productName || nameEl.textContent.trim();
+    const oldName = oldNames[i];
 
-    // Compute the correct type name for this position
-    let newName;
-    if (i === 0) {
-      newName = oldName; // Position 1: always keep existing name (main offer)
-    } else if (i === 1) {
-      newName = 'Bump';
-    } else {
-      upsellCounter++;
-      newName = 'Upsell ' + upsellCounter;
+    let newName = oldName;
+    if (isStandardPattern && i > 0) {
+      if (i === 1) {
+        newName = 'Bump';
+      } else {
+        upsellCounter++;
+        newName = 'Upsell ' + upsellCounter;
+      }
     }
 
     products.push({
       name: oldName,    // old name — used to find the row in the sheet
       newName: newName, // new name — Apps Script renames atomically in one call
       position: i + 1,
-      currentPrice: row.querySelector('.product-price').textContent.trim().replace(/[$,]/g, ''),
-      active: 'Yes',
+      currentPrice: parseFloat(row.dataset.price) || 0,
+      active: row.dataset.active || 'Yes',
       label: row.dataset.productLabel || ''
     });
   });
+
+  if (products.length === 0) {
+    showToast('Reorder failed: no products found — refresh and try again', true);
+    return;
+  }
 
   const orderResult = await postToWebApp('save_config', {
     clientSlug: STATE.activeClient.slug,
@@ -3717,13 +3737,14 @@ async function submitPriceChange(offerName, productName) {
     return;
   }
 
-  await postToWebApp('save_price_change', {
+  const result = await postToWebApp('save_price_change', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     productName,
     newPrice: parseFloat(newPrice),
     effectiveDate
   });
+  if (!result) return; // error toast already shown; keep modal open
 
   closeModal();
   await fetchClientData(STATE.activeClient.slug);
@@ -3889,8 +3910,9 @@ async function submitAddOffer() {
 
   // IG Profile Visits has no products
   if (isIG) {
+    const igResult = await postToWebApp('setup_new_offer', { clientSlug: STATE.activeClient.slug, offerName, offerType, funnelLength: 0, products: [] });
+    if (!igResult) return; // error toast already shown; keep modal open
     closeModal();
-    await postToWebApp('setup_new_offer', { clientSlug: STATE.activeClient.slug, offerName, offerType, funnelLength: 0, products: [] });
     await fetchClientData(STATE.activeClient.slug);
     openSettings();
     return;
@@ -3938,8 +3960,10 @@ async function submitAddOffer() {
     }
   });
 
+  const result = await postToWebApp('setup_new_offer', { clientSlug: STATE.activeClient.slug, offerName, offerType, funnelLength, products });
+  if (!result) return; // error toast already shown; keep modal open
+
   closeModal();
-  await postToWebApp('setup_new_offer', { clientSlug: STATE.activeClient.slug, offerName, offerType, funnelLength, products });
   await fetchClientData(STATE.activeClient.slug);
   openSettings();
 }
@@ -4030,11 +4054,16 @@ async function submitAddClient() {
 
   if (!name || !slug) { showToast('Name and slug are required'); return; }
 
-  await postToWebApp('setup_new_client', {
+  const result = await postToWebApp('setup_new_client', {
     clientName: name,
     slug,
     metaAccountIds: metaIds
-  });
+  }, true);
+
+  if (!result || result.success === false) {
+    showToast('Add failed: ' + (result && result.error ? result.error : 'Unknown error'), true);
+    return;
+  }
 
   closeModal();
   await fetchClients();
@@ -4280,10 +4309,29 @@ function openEditPurchase(offerName, rawDate) {
   const normDate = normalizeDateStr(rawDate);
   const displayDate = normDate ? normDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : rawDate;
 
+  // Revenue/units beyond the configured products (previously logged one-off items).
+  // Preserve them so editing a quantity doesn't silently erase that revenue.
+  let productRevenue = 0, productUnits = 0;
+  configProducts.forEach(p => {
+    const qty = parseNum(row[productType(p)] || '0');
+    productRevenue += qty * parseNum(p['Current Price']);
+    productUnits += qty;
+  });
+  const storedRevenue = parseNum(row['Total Revenue'] || '0');
+  const storedUnits = parseNum(row['Total Units'] || '0');
+  const otherRevenue = Math.max(0, storedRevenue - productRevenue);
+  const otherUnits = Math.max(0, storedUnits - productUnits);
+  const otherNote = otherRevenue > 0.5 ? `
+    <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-body);font-size:13px;margin:4px 0 10px;padding:8px 10px;background:#FFF3EC;border-radius:6px;">
+      <input type="checkbox" id="pe-keep-other" checked data-other-revenue="${otherRevenue}" data-other-units="${otherUnits}" onchange="updatePurchaseModalTotals()">
+      <label for="pe-keep-other" style="cursor:pointer;">Keep ${formatCurrency(otherRevenue)} previously logged from other/one-off items</label>
+    </div>` : '';
+
   const html = `
     <div class="modal-title">Edit Purchase Entry</div>
     <p style="font-family:var(--font-body);font-size:13px;margin:0 0 16px;opacity:0.5;">${escapeHtml(offerName)} &middot; ${displayDate}</p>
     ${productFields}
+    ${otherNote}
 
     <div style="margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -4337,6 +4385,13 @@ async function submitEditPurchase(offerName, rawDate) {
         }
       }
     });
+  }
+
+  // Preserved other/one-off amounts from the original entry
+  const keepOther = document.getElementById('pe-keep-other');
+  if (keepOther && keepOther.checked) {
+    totalUnits += parseNum(keepOther.dataset.otherUnits);
+    totalRevenue += parseNum(keepOther.dataset.otherRevenue);
   }
 
   // Send the normalized date so Apps Script can match it
@@ -4532,7 +4587,10 @@ function openLogPurchaseModal(offerName) {
     <div class="modal-title">Log Purchases — ${escapeHtml(offerName)}</div>
 
     <div class="modal-label">Date</div>
-    <input class="modal-input" id="pe-date" type="date" value="${dateStr(new Date())}">
+    <input class="modal-input" id="pe-date" type="date" value="${dateStr(new Date())}" onchange="prefillPurchaseModal('${escapeAttr(offerName)}')">
+    <div id="pe-existing-note" style="display:none;font-family:var(--font-body);font-size:12px;color:#b3552e;margin:-8px 0 12px;">
+      Editing the existing entry for this date — totals below replace what was logged before.
+    </div>
 
     <div class="pe-modal-grid">
       ${productFields}
@@ -4565,6 +4623,28 @@ function openLogPurchaseModal(offerName) {
 
   document.getElementById('modal-box').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('show');
+  prefillPurchaseModal(offerName);
+}
+
+// If a purchases row already exists for the selected date, load its quantities
+// into the modal so saving updates the day's running totals instead of wiping them
+function prefillPurchaseModal(offerName) {
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  const data = slug ? STATE.cache[slug] : null;
+  if (!data) return;
+
+  const dateInput = document.getElementById('pe-date');
+  const note = document.getElementById('pe-existing-note');
+  if (!dateInput) return;
+
+  const selected = normalizeDateStr(dateInput.value) || dateInput.value;
+  const row = (data.purchases[offerName] || []).find(r => normalizeDateStr(r['Date']) === selected);
+
+  document.querySelectorAll('[data-pe-product]').forEach(input => {
+    input.value = row ? (parseNum(row[input.dataset.peProduct] || '0') || 0) : 0;
+  });
+  if (note) note.style.display = row ? '' : 'none';
+  updatePurchaseModalTotals();
 }
 
 function addOtherPurchaseRow() {
@@ -4594,18 +4674,27 @@ function updatePurchaseModalTotals() {
     totalRevenue += qty * price;
   });
 
-  // Other / one-off items
+  // Other / one-off items — same rules as the save: price required, qty defaults to 1
   const container = document.getElementById('pe-other-rows');
   if (container) {
     container.querySelectorAll('div').forEach(row => {
       const inputs = row.querySelectorAll('input');
       if (inputs.length >= 3) {
         const price = parseFloat(inputs[1].value) || 0;
-        const qty = parseInt(inputs[2].value) || 0;
-        totalUnits += qty;
-        totalRevenue += qty * price;
+        const qty = Math.max(1, parseInt(inputs[2].value) || 1);
+        if (price > 0) {
+          totalUnits += qty;
+          totalRevenue += qty * price;
+        }
       }
     });
+  }
+
+  // Preserved other/one-off amounts when editing an existing entry
+  const keepOther = document.getElementById('pe-keep-other');
+  if (keepOther && keepOther.checked) {
+    totalUnits += parseNum(keepOther.dataset.otherUnits);
+    totalRevenue += parseNum(keepOther.dataset.otherRevenue);
   }
 
   const unitsEl = document.getElementById('pe-total-units');
@@ -4712,12 +4801,13 @@ function hashStr(str) {
   return Math.abs(hash).toString(36);
 }
 
-function showToast(msg) {
+function showToast(msg, isError = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  el.style.background = isError ? '#b3552e' : '';
   el.classList.add('show');
   clearTimeout(el._timer);
-  el._timer = setTimeout(() => el.classList.remove('show'), 3000);
+  el._timer = setTimeout(() => el.classList.remove('show'), isError ? 5000 : 3000);
 }
 
 // ============================================================

@@ -898,7 +898,11 @@ function parseNum(v) {
 }
 
 function dateStr(d) {
-  return d.toISOString().split('T')[0];
+  // Local date, not UTC — toISOString would roll to tomorrow after ~7pm Central
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function daysAgo(n) {
@@ -964,8 +968,10 @@ function getDateRange() {
   } else if (STATE.dateRange === '30d') {
     start = daysAgo(29);
   } else {
-    start = STATE.customStart ? new Date(STATE.customStart) : daysAgo(6);
-    end = STATE.customEnd ? new Date(STATE.customEnd) : effectiveToday;
+    start = STATE.customStart ? new Date(STATE.customStart + 'T00:00:00') : daysAgo(6);
+    end = STATE.customEnd ? new Date(STATE.customEnd + 'T00:00:00') : effectiveToday;
+    // Custom range must never see past the published snapshot
+    if (end > effectiveToday) end = new Date(effectiveToday);
   }
   return { start: dateStr(start), end: dateStr(end) };
 }
@@ -1107,9 +1113,9 @@ function renderDateBar() {
         <button class="date-toggle-btn ${STATE.dateRange === 'custom' ? 'active' : ''}" onclick="setDateRange('custom')">Custom</button>
       </div>
       <div class="custom-date-wrap ${STATE.dateRange === 'custom' ? 'show' : ''}" id="custom-dates">
-        <input type="date" id="custom-start" value="${STATE.customStart || dateStr(daysAgo(14))}">
+        <input type="date" id="custom-start" value="${STATE.customStart || dateStr(daysAgo(14))}" max="${STATE.publishedThrough || dateStr(new Date())}">
         <span style="color:var(--ksa-text);opacity:0.5;">to</span>
-        <input type="date" id="custom-end" value="${STATE.customEnd || dateStr(new Date())}">
+        <input type="date" id="custom-end" value="${STATE.customEnd || STATE.publishedThrough || dateStr(new Date())}" max="${STATE.publishedThrough || dateStr(new Date())}">
         <button class="apply-btn" onclick="applyCustomDates()">Apply</button>
       </div>
     </div>
@@ -1270,9 +1276,13 @@ function renderOfferView() {
   let bottomSection;
   const purchasesByDate = {};
 
+  // Clients only ever see rows up to the published snapshot date
+  const pubCap = STATE.publishedThrough || '';
+  const withinPublished = d => !pubCap || d <= pubCap;
+
   if (isIG) {
     const allIG = (data.igPurchases || [])
-      .slice()
+      .filter(r => withinPublished(normalizeDateStr(r['Date'] || '')))
       .sort((a, b) => normalizeDateStr(b['Date'] || '').localeCompare(normalizeDateStr(a['Date'] || '')));
     allIG.forEach(r => {
       const d = normalizeDateStr(r['Date'] || '');
@@ -1282,7 +1292,8 @@ function renderOfferView() {
       <div class="offer-chart-row">${chartWrap}</div>
       ${renderIGPurchaseLog(allIG)}`;
   } else {
-    const purchaseData = data.purchases[offerName] || [];
+    const purchaseData = (data.purchases[offerName] || [])
+      .filter(r => withinPublished(normalizeDateStr(r['Date'] || '')));
     const rangePurchases = purchaseData
       .filter(r => { const d = normalizeDateStr(r['Date'] || ''); return d >= rangeStart && d <= rangeEnd; })
       .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
@@ -1290,10 +1301,11 @@ function renderOfferView() {
     const funnelLength = isLeadFunnel ? parseInt(configProducts[0]['Funnel Length'] || '0', 10) : 0;
     let funnelStatus = null;
     if (isLeadFunnel && funnelLength > 0 && configProducts[0]) {
-      const today = new Date();
+      // Anchor the funnel window to the published snapshot, in local time
+      const today = pubCap ? new Date(pubCap + 'T00:00:00') : new Date();
       const cutoff = new Date(today);
       cutoff.setDate(today.getDate() - funnelLength);
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const cutoffStr = dateStr(cutoff);
       const freebieName = productType(configProducts[0]);
       let inFunnelLeads = 0, completedLeads = 0;
       purchaseData.forEach(r => {
@@ -2144,7 +2156,10 @@ async function init() {
   // Show last published date in topbar
   const publishedDate = (() => {
     if (!STATE.publishedAt) return STATE.publishedThrough || '';
-    const d = new Date(STATE.publishedAt);
+    // Date-only values parse as UTC midnight and display a day early in the US — pin to local
+    const raw = String(STATE.publishedAt).trim();
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw + 'T00:00:00') : new Date(raw);
+    if (isNaN(d.getTime())) return STATE.publishedThrough || '';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   })();
   document.getElementById('topbar-sync').textContent = `Last updated: ${publishedDate}`;

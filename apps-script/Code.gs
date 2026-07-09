@@ -474,16 +474,19 @@ function handleSaveConfig_(payload) {
   // Get existing data
   var data = configSheet.getDataRange().getValues();
 
+  var missing = [];
   for (var p = 0; p < products.length; p++) {
     var product = products[p];
     var oldName = product.name;
     var newName = product.newName || oldName; // newName present only on reorder
 
+    var found = false;
     for (var r = 1; r < data.length; r++) {
       if (data[r][0] === payload.offerName && data[r][1] === oldName) {
+        found = true;
         configSheet.getRange(r + 1, 2).setValue(newName);              // Product Type (rename)
-        configSheet.getRange(r + 1, 3).setValue(product.position);     // Position
-        configSheet.getRange(r + 1, 4).setValue(product.currentPrice); // Current Price
+        configSheet.getRange(r + 1, 3).setValue(Number(product.position) || 0);     // Position
+        configSheet.getRange(r + 1, 4).setValue(Number(product.currentPrice) || 0); // Current Price
         configSheet.getRange(r + 1, 5).setValue(product.active);       // Active
         if (product.label !== undefined) {
           configSheet.getRange(r + 1, 6).setValue(product.label);      // Product Label
@@ -517,9 +520,14 @@ function handleSaveConfig_(payload) {
         break;
       }
     }
-    // No append on reorder — only existing products are being reordered
+    // No append on reorder — only existing products are being reordered.
+    // But track misses so a stale UI can't report "Order saved" while writing nothing.
+    if (!found) missing.push(oldName);
   }
 
+  if (missing.length > 0) {
+    return { success: false, error: 'Products not found in Config (refresh and retry): ' + missing.join(', ') };
+  }
   return { success: true };
 }
 
@@ -648,7 +656,9 @@ function handleSavePriceChange_(payload) {
 
 /**
  * save_checkbox_state — Add or remove row in CHECKBOX_STATE
- * Payload: { clientSlug, campaignName, action, checked, date }
+ * Payload: { clientSlug, campaignName, campaignAction, checked, date }
+ * NOTE: the campaign action text travels as `campaignAction` — a payload key named
+ * `action` would collide with the doPost dispatch field.
  */
 function handleSaveCheckboxState_(payload) {
   const ss = getSheet_();
@@ -659,13 +669,14 @@ function handleSaveCheckboxState_(payload) {
 
   if (payload.checked === true || payload.checked === 'true') {
     // Add row
-    sheet.appendRow([date, payload.clientSlug, payload.campaignName, payload.action || '']);
+    sheet.appendRow([date, payload.clientSlug, payload.campaignName, payload.campaignAction || '']);
     return { success: true };
   } else {
-    // Remove matching row
+    // Remove matching row — normalize dates so Date cells match YYYY-MM-DD strings
+    var targetDate = normalizeDateForMatch_(date);
     var data = sheet.getDataRange().getValues();
     for (var i = data.length - 1; i >= 1; i--) {
-      if (String(data[i][0]).substring(0, 10) === date &&
+      if (normalizeDateForMatch_(data[i][0]) === targetDate &&
           data[i][1] === payload.clientSlug &&
           data[i][2] === payload.campaignName) {
         sheet.deleteRow(i + 1);
@@ -878,15 +889,12 @@ function handleDeleteIGPurchase_(payload) {
   if (!igSheet) return { success: false, error: 'IG Profile Purchases tab not found for ' + slug };
 
   var data = igSheet.getDataRange().getValues();
-  var targetDate = String(payload.date || '').trim();
+  var targetDate = normalizeDateForMatch_(payload.date);
   var targetDesc = String(payload.description || '').trim();
   var targetRev  = parseFloat(String(payload.revenue || '0').replace(/[$,%]/g, '')) || 0;
 
   for (var i = 1; i < data.length; i++) {
-    var rawDate = data[i][0];
-    var rowDate = (rawDate instanceof Date)
-      ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), 'yyyy-MM-dd')
-      : String(rawDate || '').trim();
+    var rowDate = normalizeDateForMatch_(data[i][0]);
     var rowDesc = String(data[i][1] || '').trim();
     var rowRev  = parseFloat(String(data[i][2] || '0').replace(/[$,%]/g, '')) || 0;
     if (rowDate === targetDate && rowDesc === targetDesc && rowRev === targetRev) {
@@ -1474,13 +1482,7 @@ function handlePushClientSnapshot_(payload) {
   var metaData = metaSheet.getDataRange().getValues();
   var mostRecentDate = '';
   for (var i = 1; i < metaData.length; i++) {
-    var cell = metaData[i][0];
-    var dateStr = '';
-    if (cell instanceof Date) {
-      dateStr = Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    } else if (cell) {
-      dateStr = String(cell).trim();
-    }
+    var dateStr = normalizeDateForMatch_(metaData[i][0]);
     if (dateStr && dateStr > mostRecentDate) mostRecentDate = dateStr;
   }
 
