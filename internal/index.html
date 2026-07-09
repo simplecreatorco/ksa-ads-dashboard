@@ -3882,48 +3882,22 @@ async function submitAddUpsell(offerName, upsellName) {
 
   const upsellLabel = (document.getElementById('modal-upsell-label').value || '').trim();
 
-  const data = STATE.cache[STATE.activeClient.slug];
-  const existingProducts = (data.config || [])
-    .filter(c => c['Offer Name'] === offerName)
-    .sort((a, b) => parseInt(a['Position'] || 0) - parseInt(b['Position'] || 0));
-
-  const newPosition = existingProducts.length + 1;
-
-  const products = existingProducts.map(p => ({
-    name: productType(p),
-    position: parseInt(p['Position']),
-    currentPrice: p['Current Price'],
-    active: p['Active'],
-    label: productDisplayName(p)
-  }));
-
-  products.push({
-    name: upsellName,
-    position: newPosition,
-    currentPrice: price.toString(),
-    active: 'Yes',
-    label: upsellLabel
-  });
-
-  const r1 = await postToWebApp('save_config', {
-    clientSlug: STATE.activeClient.slug,
-    offerName,
-    products
-  }, true); // silent — don't toast yet
-
-  if (!r1) return; // error already shown
-
-  // Add to price history (shows the single "Saved" toast)
-  const r2 = await postToWebApp('save_price_change', {
+  // Dedicated action: appends Config row, adds Purchases column, logs Price History
+  const result = await postToWebApp('add_product', {
     clientSlug: STATE.activeClient.slug,
     offerName,
     productName: upsellName,
-    newPrice: price,
+    price,
+    label: upsellLabel,
     effectiveDate: dateStr(new Date())
-  });
+  }, true);
 
-  if (!r2) return;
+  if (!result || result.success === false) {
+    showToast('Add failed: ' + (result && result.error ? result.error : 'Unknown error'), true);
+    return;
+  }
 
+  showToast('Added ' + upsellName);
   closeModal();
   await fetchClientData(STATE.activeClient.slug);
   openSettings();

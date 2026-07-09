@@ -413,6 +413,9 @@ function doPost(e) {
       case 'reorder_offers':
         result = handleReorderOffers_(payload);
         break;
+      case 'add_product':
+        result = handleAddProduct_(payload);
+        break;
       case 'push_client_snapshot':
         result = handlePushClientSnapshot_(payload);
         break;
@@ -515,6 +518,90 @@ function handleSaveConfig_(payload) {
   }
 
   return { success: true };
+}
+
+
+/**
+ * add_product — Append a new product to an existing offer.
+ * Adds a Config row, inserts a column in the Purchases tab before Total Units,
+ * and appends the starting price to Price History.
+ * Payload: { clientSlug, offerName, productName, price, label, position }
+ */
+function handleAddProduct_(payload) {
+  const ss = getSheet_();
+  var slug = payload.clientSlug;
+  if (!slug) return { success: false, error: 'No clientSlug provided' };
+  if (!payload.offerName) return { success: false, error: 'No offerName provided' };
+  if (!payload.productName) return { success: false, error: 'No productName provided' };
+
+  var configSheet = ss.getSheetByName(slug + ' - Config');
+  if (!configSheet) return { success: false, error: 'Config tab not found: ' + slug + ' - Config' };
+
+  var data = configSheet.getDataRange().getValues();
+  var offerType = '';
+  var funnelLength = '';
+  var maxPosition = 0;
+  for (var r = 1; r < data.length; r++) {
+    if (data[r][0] === payload.offerName) {
+      if (data[r][1] === payload.productName) {
+        return { success: false, error: 'Product already exists: ' + payload.productName };
+      }
+      offerType = data[r][6] || '';
+      funnelLength = data[r][7] || '';
+      var pos = parseInt(data[r][2]) || 0;
+      if (pos > maxPosition) maxPosition = pos;
+    }
+  }
+  if (maxPosition === 0) return { success: false, error: 'Offer not found in Config: ' + payload.offerName };
+
+  var position = Number(payload.position) || (maxPosition + 1);
+  var price = Number(payload.price) || 0;
+
+  configSheet.appendRow([
+    payload.offerName,
+    payload.productName,
+    position,
+    price,
+    'Yes',
+    payload.label || '',
+    offerType,
+    funnelLength
+  ]);
+
+  // Insert a column for the new product in the Purchases tab, before Total Units
+  var purchasesSheet = ss.getSheetByName(slug + ' - ' + payload.offerName + ' Purchases');
+  if (purchasesSheet) {
+    var headers = purchasesSheet.getRange(1, 1, 1, purchasesSheet.getLastColumn()).getValues()[0];
+    var totalUnitsCol = -1;
+    var alreadyThere = false;
+    for (var h = 0; h < headers.length; h++) {
+      if (headers[h] === 'Total Units') totalUnitsCol = h + 1; // 1-indexed
+      if (headers[h] === payload.productName) alreadyThere = true;
+    }
+    if (!alreadyThere) {
+      if (totalUnitsCol > 0) {
+        purchasesSheet.insertColumnBefore(totalUnitsCol);
+        purchasesSheet.getRange(1, totalUnitsCol).setValue(payload.productName).setFontWeight('bold');
+      } else {
+        var lastCol = purchasesSheet.getLastColumn() + 1;
+        purchasesSheet.getRange(1, lastCol).setValue(payload.productName).setFontWeight('bold');
+      }
+    }
+  }
+
+  // Record the starting price in Price History
+  var priceSheet = ss.getSheetByName('Price History');
+  if (priceSheet) {
+    priceSheet.appendRow([
+      slug,
+      payload.offerName,
+      payload.productName,
+      price,
+      payload.effectiveDate || new Date().toISOString().split('T')[0]
+    ]);
+  }
+
+  return { success: true, message: 'Added ' + payload.productName + ' to ' + payload.offerName };
 }
 
 
