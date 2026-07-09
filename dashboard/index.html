@@ -892,7 +892,8 @@ function parseDailyMeta(rows) {
 
 function parseNum(v) {
   if (!v) return 0;
-  const n = parseFloat(v.replace(/[$,%]/g, ''));
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  const n = parseFloat(String(v).replace(/[$,%]/g, ''));
   return isNaN(n) ? 0 : n;
 }
 
