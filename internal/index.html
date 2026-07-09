@@ -1659,9 +1659,10 @@ async function fetchClientData(slug) {
     console.log('Purchase data for "' + offerName + '":', purchases[offerName].length, 'rows');
   });
 
-  // Always load the IG Profile Purchases tab — returns [] if it doesn't exist
-  const [igPurchases] = await Promise.all([
+  // Always load the IG Profile Purchases and Other Purchases tabs — [] if missing
+  const [igPurchases, otherPurchases] = await Promise.all([
     fetchSheet(`${tabSlug} - IG Profile Purchases`),
+    fetchSheet(`${tabSlug} - Other Purchases`),
     ...purchasePromises.map(p => p || Promise.resolve())
   ]);
 
@@ -1675,6 +1676,7 @@ async function fetchClientData(slug) {
     offers,
     purchases,
     igPurchases,
+    otherPurchases,
     checkboxState: myCheckboxes,
     mostRecentDataDate,
     publishState,
@@ -4309,18 +4311,27 @@ function openEditPurchase(offerName, rawDate) {
   const normDate = normalizeDateStr(rawDate);
   const displayDate = normDate ? normDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : rawDate;
 
-  // Revenue/units beyond the configured products (previously logged one-off items).
-  // Preserve them so editing a quantity doesn't silently erase that revenue.
+  // Revenue/units beyond the configured products AND the saved one-off items.
+  // Saved items load as editable rows below; this covers legacy entries logged
+  // before item names were stored, so their revenue isn't silently erased.
   let productRevenue = 0, productUnits = 0;
   configProducts.forEach(p => {
     const qty = parseNum(row[productType(p)] || '0');
     productRevenue += qty * parseNum(p['Current Price']);
     productUnits += qty;
   });
+  let savedOtherRevenue = 0, savedOtherUnits = 0;
+  ((data.otherPurchases) || []).forEach(r => {
+    if (r['Offer Name'] === offerName && normalizeDateStr(r['Date']) === normDate) {
+      const qty = parseNum(r['Qty']) || 1;
+      savedOtherRevenue += parseNum(r['Price']) * qty;
+      savedOtherUnits += qty;
+    }
+  });
   const storedRevenue = parseNum(row['Total Revenue'] || '0');
   const storedUnits = parseNum(row['Total Units'] || '0');
-  const otherRevenue = Math.max(0, storedRevenue - productRevenue);
-  const otherUnits = Math.max(0, storedUnits - productUnits);
+  const otherRevenue = Math.max(0, storedRevenue - productRevenue - savedOtherRevenue);
+  const otherUnits = Math.max(0, storedUnits - productUnits - savedOtherUnits);
   const otherNote = otherRevenue > 0.5 ? `
     <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-body);font-size:13px;margin:4px 0 10px;padding:8px 10px;background:#FFF3EC;border-radius:6px;">
       <input type="checkbox" id="pe-keep-other" checked data-other-revenue="${otherRevenue}" data-other-units="${otherUnits}" onchange="updatePurchaseModalTotals()">
@@ -4353,6 +4364,7 @@ function openEditPurchase(offerName, rawDate) {
 
   document.getElementById('modal-box').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('show');
+  prefillOtherRows(offerName, normDate);
   updatePurchaseModalTotals();
 }
 
@@ -4371,23 +4383,14 @@ async function submitEditPurchase(offerName, rawDate) {
     totalRevenue += qty * price;
   });
 
-  // Include Other / one-off items in totals
-  const otherContainer = document.getElementById('pe-other-rows');
-  if (otherContainer) {
-    otherContainer.querySelectorAll('div').forEach(row => {
-      const rowInputs = row.querySelectorAll('input');
-      if (rowInputs.length >= 3) {
-        const price = parseFloat(rowInputs[1].value) || 0;
-        const qty = Math.max(1, parseInt(rowInputs[2].value) || 1);
-        if (price > 0) {
-          totalUnits += qty;
-          totalRevenue += qty * price;
-        }
-      }
-    });
-  }
+  // Include Other / one-off items in totals — and send them for the Other Purchases tab
+  const otherItems = collectOtherItems();
+  otherItems.forEach(item => {
+    totalUnits += item.qty;
+    totalRevenue += item.qty * item.price;
+  });
 
-  // Preserved other/one-off amounts from the original entry
+  // Preserved legacy other amounts from the original entry (pre-dates named items)
   const keepOther = document.getElementById('pe-keep-other');
   if (keepOther && keepOther.checked) {
     totalUnits += parseNum(keepOther.dataset.otherUnits);
@@ -4401,6 +4404,7 @@ async function submitEditPurchase(offerName, rawDate) {
     clientSlug: STATE.activeClient.slug,
     offerName,
     date: normalizedDate,
+    otherItems,
     quantities,
     totalUnits,
     totalRevenue
@@ -4643,11 +4647,12 @@ function prefillPurchaseModal(offerName) {
   document.querySelectorAll('[data-pe-product]').forEach(input => {
     input.value = row ? (parseNum(row[input.dataset.peProduct] || '0') || 0) : 0;
   });
+  prefillOtherRows(offerName, selected);
   if (note) note.style.display = row ? '' : 'none';
   updatePurchaseModalTotals();
 }
 
-function addOtherPurchaseRow() {
+function addOtherPurchaseRow(name = '', price = '', qty = 1) {
   const container = document.getElementById('pe-other-rows');
   if (!container) return;
   const row = document.createElement('div');
@@ -4658,8 +4663,50 @@ function addOtherPurchaseRow() {
     <input class="modal-input" type="number" min="0" step="1" value="1" style="margin-bottom:0;font-size:13px;" oninput="updatePurchaseModalTotals()">
     <button onclick="this.parentElement.remove();updatePurchaseModalTotals();" style="background:none;border:none;cursor:pointer;font-size:16px;opacity:0.4;padding:0;">&#10005;</button>
   `;
+  const inputs = row.querySelectorAll('input');
+  inputs[0].value = name;
+  inputs[1].value = price;
+  inputs[2].value = qty;
   container.appendChild(row);
-  row.querySelector('input').focus();
+  if (!name) inputs[0].focus();
+}
+
+// Load a day's previously saved one-off items into the modal's Other rows
+function prefillOtherRows(offerName, normalizedDate) {
+  const container = document.getElementById('pe-other-rows');
+  if (!container) return 0;
+  container.innerHTML = '';
+  const slug = STATE.activeClient ? STATE.activeClient.slug : null;
+  const data = slug ? STATE.cache[slug] : null;
+  const items = ((data && data.otherPurchases) || []).filter(r =>
+    r['Offer Name'] === offerName && normalizeDateStr(r['Date']) === normalizedDate
+  );
+  let loadedRevenue = 0;
+  items.forEach(r => {
+    const price = parseNum(r['Price']);
+    const qty = parseNum(r['Qty']) || 1;
+    addOtherPurchaseRow(r['Description'] || '', price, qty);
+    loadedRevenue += price * qty;
+  });
+  return loadedRevenue;
+}
+
+// Collect the modal's Other rows for the save payload
+function collectOtherItems() {
+  const items = [];
+  const container = document.getElementById('pe-other-rows');
+  if (!container) return items;
+  container.querySelectorAll('div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    if (inputs.length >= 3) {
+      const price = parseFloat(inputs[1].value) || 0;
+      const qty = Math.max(1, parseInt(inputs[2].value) || 1);
+      if (price > 0) {
+        items.push({ name: inputs[0].value.trim() || 'Other', price, qty });
+      }
+    }
+  });
+  return items;
 }
 
 function updatePurchaseModalTotals() {
@@ -4724,29 +4771,21 @@ async function submitPurchases(offerName) {
     totalRevenue += qty * price;
   });
 
-  // Include Other / one-off items in totals
-  const otherContainer = document.getElementById('pe-other-rows');
-  if (otherContainer) {
-    otherContainer.querySelectorAll('div').forEach(row => {
-      const rowInputs = row.querySelectorAll('input');
-      if (rowInputs.length >= 3) {
-        const price = parseFloat(rowInputs[1].value) || 0;
-        const qty = Math.max(1, parseInt(rowInputs[2].value) || 1);
-        if (price > 0) {
-          totalUnits += qty;
-          totalRevenue += qty * price;
-        }
-      }
-    });
-  }
+  // Include Other / one-off items in totals — and send them for the Other Purchases tab
+  const otherItems = collectOtherItems();
+  otherItems.forEach(item => {
+    totalUnits += item.qty;
+    totalRevenue += item.qty * item.price;
+  });
 
   const result = await postToWebApp('save_purchases', {
     clientSlug: STATE.activeClient.slug,
     offerName,
-    date,
+    date: normalizeDateStr(date) || date,
     quantities,
     totalUnits,
-    totalRevenue
+    totalRevenue,
+    otherItems
   }, true); // silent — custom toast below
 
   if (result) {

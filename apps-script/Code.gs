@@ -1013,11 +1013,56 @@ function handleSavePurchases_(payload) {
   if (existingRow > 0) {
     // UPDATE existing row
     sheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
-    return { success: true, message: 'Updated purchases for ' + date };
   } else {
     // APPEND new row
     sheet.getRange(sheet.getLastRow() + 1, 1, 1, rowData.length).setValues([rowData]);
-    return { success: true, message: 'Added purchases for ' + date };
+  }
+
+  // If the payload carries otherItems, rewrite that offer+date's rows in the
+  // Other Purchases tab (idempotent — re-saving a day replaces its items)
+  if (payload.otherItems !== undefined) {
+    writeOtherPurchases_(ss, slug, offerName, normalizedPayloadDate, payload.otherItems || []);
+  }
+
+  return { success: true, message: (existingRow > 0 ? 'Updated' : 'Added') + ' purchases for ' + date };
+}
+
+
+/**
+ * Rewrite the one-off items for a given offer + date in [slug] - Other Purchases.
+ * Tab is created on first use. Headers: Date | Offer Name | Description | Price | Qty | Revenue
+ */
+function writeOtherPurchases_(ss, slug, offerName, normalizedDate, items) {
+  var tabName = slug + ' - Other Purchases';
+  var sheet = ss.getSheetByName(tabName);
+  if (!sheet) {
+    sheet = ss.insertSheet(tabName);
+    var headers = ['Date', 'Offer Name', 'Description', 'Price', 'Qty', 'Revenue'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  }
+
+  // Remove existing rows for this offer + date (bottom-up so indexes stay valid)
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (normalizeDateForMatch_(data[i][0]) === normalizedDate && data[i][1] === offerName) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+
+  // Append the current items
+  for (var j = 0; j < items.length; j++) {
+    var item = items[j];
+    var price = Number(item.price) || 0;
+    var qty = Number(item.qty) || 0;
+    if (price <= 0 || qty <= 0) continue;
+    sheet.appendRow([
+      normalizedDate,
+      offerName,
+      String(item.name || 'Other'),
+      price,
+      qty,
+      price * qty
+    ]);
   }
 }
 
@@ -1269,6 +1314,8 @@ function handleDeletePurchase_(payload) {
   for (var i = 1; i < data.length; i++) {
     if (normalizeDateForMatch_(data[i][0]) === normalizedTarget) {
       sheet.deleteRow(i + 1);
+      // Also clear the day's one-off items so they don't orphan
+      writeOtherPurchases_(ss, slug, offerName, normalizedTarget, []);
       return { success: true };
     }
   }
