@@ -170,6 +170,39 @@ function backfill30Days() {
 
 
 /**
+ * ONE-TIME cleanup: remove duplicate (date, campaign) rows from every client's
+ * Daily Meta tab. Keeps the first occurrence of each combo, deletes the rest.
+ * Safe to run any time — does nothing if there are no duplicates.
+ */
+function cleanupDuplicateMetaRows() {
+  var ss = getSheet_();
+  var sheets = ss.getSheets();
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    if (sheet.getName().indexOf(' - Daily Meta') === -1) continue;
+
+    var data = sheet.getDataRange().getValues();
+    var seen = {};
+    var toDelete = [];
+    for (var i = 1; i < data.length; i++) {
+      var key = normalizeDateForMatch_(data[i][0]) + '|' + String(data[i][1]);
+      if (seen[key]) {
+        toDelete.push(i + 1); // 1-indexed sheet row
+      } else {
+        seen[key] = true;
+      }
+    }
+    // Delete bottom-up so remaining row indexes stay valid
+    for (var d = toDelete.length - 1; d >= 0; d--) {
+      sheet.deleteRow(toDelete[d]);
+    }
+    Logger.log(sheet.getName() + ': removed ' + toDelete.length + ' duplicate row(s)');
+  }
+  Logger.log('Duplicate cleanup complete');
+}
+
+
+/**
  * Pull campaign-level insights from one Meta ad account.
  * @param {string} dateMode — 'yesterday' for daily runs, or '30d' for backfill
  * Uses dedup: only writes rows for (date, campaign) combos that don't already exist.
@@ -230,12 +263,13 @@ function pullAccountData_(metaSheet, accountId, token, dateMode) {
     return;
   }
 
-  // Build set of existing (date|campaign) keys for dedup
+  // Build set of existing (date|campaign) keys for dedup.
+  // normalizeDateForMatch_ handles Date-object cells — String(dateObj) would
+  // give "Sat Jul 18" which never matches the API's "2026-07-18".
   var existingKeys = {};
   var existingData = metaSheet.getDataRange().getValues();
   for (var e = 1; e < existingData.length; e++) {
-    var existDate = String(existingData[e][0]);
-    if (existDate.length > 10) existDate = existDate.substring(0, 10);
+    var existDate = normalizeDateForMatch_(existingData[e][0]);
     var existCampaign = String(existingData[e][1]);
     existingKeys[existDate + '|' + existCampaign] = true;
   }
@@ -248,7 +282,7 @@ function pullAccountData_(metaSheet, accountId, token, dateMode) {
     var campaignName = campaign.campaign_name || '';
 
     // Skip if this date+campaign combo already exists
-    if (existingKeys[dateStart + '|' + campaignName]) continue;
+    if (existingKeys[normalizeDateForMatch_(dateStart) + '|' + campaignName]) continue;
 
     // Extract actions — leads and purchases
     var leads = 0;
