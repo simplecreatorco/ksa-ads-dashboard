@@ -26,6 +26,11 @@
 // CONFIGURATION
 // ============================================
 
+// Meta Graph API version for all insights pulls. Meta retires versions about
+// 2 years after release — if pulls start failing across ALL accounts with
+// OAuthException code 2 / subcode 1504044, bump this to the current version.
+var META_API_VERSION = 'v24.0';
+
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
   return {
@@ -189,7 +194,10 @@ function pullAccountData_(metaSheet, accountId, token, dateMode) {
     datePart = '&date_preset=yesterday';
   }
 
-  const url = 'https://graph.facebook.com/v21.0/' + accountId + '/insights'
+  // NOTE: Meta retires Graph API versions ~2 years after release. When this
+  // version sunsets, every pull fails with OAuthException code 2 / subcode
+  // 1504044 ("Service temporarily unavailable") — bump the version to fix.
+  const url = 'https://graph.facebook.com/' + META_API_VERSION + '/' + accountId + '/insights'
     + '?fields=campaign_name,spend,impressions,reach,clicks,actions,action_values,cpm,cpc,ctr,purchase_roas'
     + datePart
     + '&level=campaign'
